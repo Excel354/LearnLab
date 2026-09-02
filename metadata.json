@@ -1,0 +1,6 @@
+{
+  "name": "LearnLab",
+  "description": "Study. Practice. Excel. AI Study & Exam Preparation Platform for Primary, Secondary, and University students.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
