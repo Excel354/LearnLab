@@ -7,6 +7,7 @@ import {
   Unsubscribe,
   getDocs,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { handleFirestoreError, OperationType } from './firestoreErrors';
@@ -20,6 +21,47 @@ import {
 } from '../types';
 
 /**
+ * Recursively cleans any payload before saving to Firestore:
+ * - Strips any object keys whose value is `undefined` (which Firestore setDoc/updateDoc strictly rejects)
+ * - Retains Firestore FieldValues (such as deleteField() or serverTimestamp())
+ * - Retains Dates, primitives, and recursively cleans Arrays and Objects
+ */
+export function cleanFirestorePayload<T = any>(obj: any): T {
+  if (obj === undefined) {
+    return undefined as unknown as T;
+  }
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  // Preserve Date instances
+  if (obj instanceof Date) {
+    return obj as unknown as T;
+  }
+  // Preserve Firestore FieldValue instances (deleteField, serverTimestamp, etc.)
+  if (
+    typeof (obj as any).isEqual === 'function' ||
+    (obj as any)._methodName !== undefined ||
+    obj.constructor?.name === 'FieldValue'
+  ) {
+    return obj;
+  }
+  // Sanitize Arrays
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((item) => item !== undefined)
+      .map((item) => cleanFirestorePayload(item)) as unknown as T;
+  }
+  // Sanitize standard objects
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      result[key] = cleanFirestorePayload(value);
+    }
+  }
+  return result as T;
+}
+
+/**
  * Save or update student profile in Firestore
  */
 export async function syncUserProfile(profile: StudentProfile): Promise<void> {
@@ -27,10 +69,18 @@ export async function syncUserProfile(profile: StudentProfile): Promise<void> {
   const path = `users/${profile.id}`;
   try {
     const docRef = doc(db, 'users', profile.id);
-    await setDoc(docRef, {
+    const dataToSave: Record<string, any> = {
       ...profile,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    };
+
+    // If photoURL is falsy or undefined, use deleteField() so Firestore deletes or omits the key cleanly
+    if (!profile.photoURL) {
+      dataToSave.photoURL = deleteField();
+    }
+
+    const cleaned = cleanFirestorePayload(dataToSave);
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -44,11 +94,12 @@ export async function syncStudyNote(userId: string, note: StudyNote): Promise<vo
   const path = `users/${userId}/notes/${note.id}`;
   try {
     const docRef = doc(db, 'users', userId, 'notes', note.id);
-    await setDoc(docRef, {
+    const cleaned = cleanFirestorePayload({
       ...note,
       userId,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -76,11 +127,12 @@ export async function syncPlannerTask(userId: string, task: StudyPlannerTask): P
   const path = `users/${userId}/tasks/${task.id}`;
   try {
     const docRef = doc(db, 'users', userId, 'tasks', task.id);
-    await setDoc(docRef, {
+    const cleaned = cleanFirestorePayload({
       ...task,
       userId,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -108,11 +160,12 @@ export async function syncMistakeItem(userId: string, mistake: MistakeItem): Pro
   const path = `users/${userId}/mistakes/${mistake.id}`;
   try {
     const docRef = doc(db, 'users', userId, 'mistakes', mistake.id);
-    await setDoc(docRef, {
+    const cleaned = cleanFirestorePayload({
       ...mistake,
       userId,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -140,11 +193,12 @@ export async function syncCountdownItem(userId: string, countdown: ExamCountdown
   const path = `users/${userId}/countdowns/${countdown.id}`;
   try {
     const docRef = doc(db, 'users', userId, 'countdowns', countdown.id);
-    await setDoc(docRef, {
+    const cleaned = cleanFirestorePayload({
       ...countdown,
       userId,
       updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    });
+    await setDoc(docRef, cleaned, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -172,11 +226,12 @@ export async function syncQuizResult(userId: string, quizResult: QuizResult): Pr
   const path = `users/${userId}/quizHistory/${quizResult.id}`;
   try {
     const docRef = doc(db, 'users', userId, 'quizHistory', quizResult.id);
-    await setDoc(docRef, {
+    const cleaned = cleanFirestorePayload({
       ...quizResult,
       userId,
       createdAt: new Date().toISOString(),
     });
+    await setDoc(docRef, cleaned);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }

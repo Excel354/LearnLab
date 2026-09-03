@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { HomeDashboard } from './components/HomeDashboard';
+import { WelcomeHome } from './components/home/WelcomeHome';
 import { StudyMode } from './components/study/StudyMode';
 import { ExamPrepMode } from './components/examprep/ExamPrepMode';
 import { ProgressDashboard } from './components/progress/ProgressDashboard';
@@ -93,6 +94,7 @@ export const App: React.FC = () => {
       id: user.uid,
       email: user.email || profile.email,
       name: profile.name === 'Scholar' && user.displayName ? user.displayName : profile.name,
+      photoURL: profile.photoURL || user.photoURL || undefined,
     };
     setProfile(updatedProfile);
     saveStoredProfile(updatedProfile);
@@ -324,6 +326,15 @@ export const App: React.FC = () => {
       {/* Main View Router */}
       <main className="flex-1 pb-16">
         {currentTab === 'home' && (
+          <WelcomeHome
+            profile={profile}
+            onNavigate={handleNavigate}
+            onSaveProfile={handleUpdateProfile}
+            onOpenStudyBuddy={handleOpenStudyBuddyWithContext}
+          />
+        )}
+
+        {currentTab === 'dashboard' && (
           <HomeDashboard
             profile={profile}
             notes={notes}
@@ -381,7 +392,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTab === 'account' && (
+        {(currentTab === 'profile' || currentTab === 'account') && (
           <AccountManagement
             profile={profile}
             notes={notes}

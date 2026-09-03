@@ -15,6 +15,7 @@ import {
   Award,
 } from 'lucide-react';
 import { StudentProfile, StudyNote, MistakeItem, StudyPlannerTask, ExamReadinessScore, ExamCountdownItem } from '../types';
+import { formatMathPowerText } from '../utils/mathFormat';
 
 interface HomeDashboardProps {
   profile: StudentProfile;
@@ -337,7 +338,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                         {m.subject}: {m.topic}
                       </span>
                       <span className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                        {m.question}
+                        {formatMathPowerText(m.question)}
                       </span>
                     </div>
                   ))}

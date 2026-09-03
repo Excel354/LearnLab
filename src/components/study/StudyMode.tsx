@@ -32,6 +32,7 @@ import {
 } from '../../types';
 import { SUBJECTS_BY_LEVEL } from '../../data/curriculumData';
 import { addMistakeItem, saveStoredQuizResult } from '../../utils/storage';
+import { formatMathPowerText } from '../../utils/mathFormat';
 
 interface StudyModeProps {
   profile: StudentProfile;
@@ -1036,12 +1037,12 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                             <div className="my-auto text-center py-4">
                               <p className="text-base sm:text-lg font-bold leading-relaxed">
                                 {isCardFlipped
-                                  ? currentNote.resources.flashcards[currentCardIndex]?.answer
-                                  : currentNote.resources.flashcards[currentCardIndex]?.question}
+                                  ? formatMathPowerText(currentNote.resources.flashcards[currentCardIndex]?.answer)
+                                  : formatMathPowerText(currentNote.resources.flashcards[currentCardIndex]?.question)}
                               </p>
                               {isCardFlipped && currentNote.resources.flashcards[currentCardIndex]?.explanation && (
                                 <p className="text-xs text-blue-200 mt-3 font-normal max-w-lg mx-auto">
-                                  {currentNote.resources.flashcards[currentCardIndex].explanation}
+                                  {formatMathPowerText(currentNote.resources.flashcards[currentCardIndex].explanation)}
                                 </p>
                               )}
                             </div>
@@ -1063,7 +1064,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                             </div>
 
                             <div className="p-4 bg-white rounded-2xl border border-slate-200 font-bold text-slate-900 text-sm sm:text-base">
-                              {currentNote.resources.flashcards[currentCardIndex]?.question}
+                              {formatMathPowerText(currentNote.resources.flashcards[currentCardIndex]?.question)}
                             </div>
 
                             <div>
@@ -1117,7 +1118,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                                 </p>
                                 <div className="pt-2 border-t border-slate-200/50 text-[11px] text-slate-600">
                                   <span className="font-bold">Model Answer: </span>
-                                  <span>{currentNote.resources.flashcards[currentCardIndex]?.answer}</span>
+                                  <span>{formatMathPowerText(currentNote.resources.flashcards[currentCardIndex]?.answer)}</span>
                                 </div>
                               </div>
                             )}
@@ -1200,7 +1201,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                                   {qIdx + 1}
                                 </span>
                                 <p className="text-xs sm:text-sm font-bold text-slate-900 leading-relaxed">
-                                  {q.question}
+                                  {formatMathPowerText(q.question)}
                                 </p>
                               </div>
 
@@ -1220,7 +1221,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                                           : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                                       }`}
                                     >
-                                      {opt}
+                                      {formatMathPowerText(opt)}
                                     </button>
                                   );
                                 })}
@@ -1300,7 +1301,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <span className="font-bold text-xs text-slate-900">
-                                  {idx + 1}. {ans.question}
+                                  {idx + 1}. {formatMathPowerText(ans.question)}
                                 </span>
                                 <span
                                   className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
@@ -1317,20 +1318,20 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                                 <p>
                                   <span className="font-semibold text-slate-500">Your Answer: </span>
                                   <span className={ans.isCorrect ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
-                                    {ans.selectedAnswer}
+                                    {formatMathPowerText(ans.selectedAnswer)}
                                   </span>
                                 </p>
                                 {!ans.isCorrect && (
                                   <p>
                                     <span className="font-semibold text-slate-500">Correct Answer: </span>
-                                    <span className="text-emerald-700 font-bold">{ans.correctAnswer}</span>
+                                    <span className="text-emerald-700 font-bold">{formatMathPowerText(ans.correctAnswer)}</span>
                                   </p>
                                 )}
                               </div>
 
                               <div className="pt-2 border-t border-slate-200/50 text-[11px] text-slate-600 bg-white/60 p-2.5 rounded-xl">
                                 <span className="font-bold text-slate-800">Explanation: </span>
-                                <span>{ans.explanation}</span>
+                                <span>{formatMathPowerText(ans.explanation)}</span>
                               </div>
                             </div>
                           ))}

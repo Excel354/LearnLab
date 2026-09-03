@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Logo } from '../Logo';
 import { StudentProfile, StudyBuddyMessage, StudyBuddyDailyLimit } from '../../types';
+import { formatMathPowerText } from '../../utils/mathFormat';
 
 interface StudyBuddyModalProps {
   isOpen: boolean;
@@ -237,7 +238,7 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
                         : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <p className="whitespace-pre-wrap">{formatMathPowerText(msg.text)}</p>
                   </div>
 
                   {isAi && (

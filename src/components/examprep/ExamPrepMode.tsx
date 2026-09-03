@@ -46,6 +46,7 @@ import {
   createSchoolExamDefinition,
 } from '../../data/curriculumData';
 import { addMistakeItem, saveStoredQuizResult } from '../../utils/storage';
+import { formatMathPowerText } from '../../utils/mathFormat';
 
 interface ExamPrepModeProps {
   profile: StudentProfile;
@@ -538,7 +539,7 @@ export const ExamPrepMode: React.FC<ExamPrepModeProps> = ({
 
               {/* Question Text */}
               <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/90 text-slate-900 text-base sm:text-lg font-bold leading-relaxed">
-                {currentQuestions[currentQuestionIndex]?.question}
+                {formatMathPowerText(currentQuestions[currentQuestionIndex]?.question)}
               </div>
 
               {/* Options */}
@@ -562,7 +563,7 @@ export const ExamPrepMode: React.FC<ExamPrepModeProps> = ({
                           : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                       }`}
                     >
-                      <span>{opt}</span>
+                      <span>{formatMathPowerText(opt)}</span>
                       <div
                         className={`w-5 h-5 rounded-full border flex items-center justify-center ${
                           isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300'
@@ -758,7 +759,7 @@ export const ExamPrepMode: React.FC<ExamPrepModeProps> = ({
               >
                 <div className="flex items-start justify-between gap-3">
                   <span className="font-bold text-xs sm:text-sm text-slate-900">
-                    {idx + 1}. {ans.question}
+                    {idx + 1}. {formatMathPowerText(ans.question)}
                   </span>
                   <span
                     className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${
@@ -773,20 +774,20 @@ export const ExamPrepMode: React.FC<ExamPrepModeProps> = ({
                   <p>
                     <span className="font-semibold text-slate-500">Your Selection: </span>
                     <span className={ans.isCorrect ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
-                      {ans.selectedAnswer}
+                      {formatMathPowerText(ans.selectedAnswer)}
                     </span>
                   </p>
                   {!ans.isCorrect && (
                     <p>
                       <span className="font-semibold text-slate-500">Correct Answer: </span>
-                      <span className="text-emerald-700 font-bold">{ans.correctAnswer}</span>
+                      <span className="text-emerald-700 font-bold">{formatMathPowerText(ans.correctAnswer)}</span>
                     </p>
                   )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-white/70 border border-slate-200/60 text-xs text-slate-600">
                   <span className="font-bold text-slate-900">Teaching Explanation: </span>
-                  <span>{ans.explanation}</span>
+                  <span>{formatMathPowerText(ans.explanation)}</span>
                 </div>
               </div>
             ))}
@@ -1423,23 +1424,23 @@ export const ExamPrepMode: React.FC<ExamPrepModeProps> = ({
                       </div>
 
                       <p className="text-xs sm:text-sm font-bold text-slate-900">
-                        {m.question}
+                        {formatMathPowerText(m.question)}
                       </p>
 
                       <div className="text-xs space-y-1">
                         <p>
                           <span className="font-semibold text-slate-500">Your Previous Answer: </span>
-                          <span className="text-rose-600 font-bold">{m.userWrongAnswer}</span>
+                          <span className="text-rose-600 font-bold">{formatMathPowerText(m.userWrongAnswer)}</span>
                         </p>
                         <p>
                           <span className="font-semibold text-slate-500">Correct Answer: </span>
-                          <span className="text-emerald-700 font-bold">{m.correctAnswer}</span>
+                          <span className="text-emerald-700 font-bold">{formatMathPowerText(m.correctAnswer)}</span>
                         </p>
                       </div>
 
                       <div className="p-3 bg-white rounded-xl border border-slate-200/80 text-xs text-slate-700">
                         <span className="font-bold text-slate-900">Explanation: </span>
-                        <span>{m.explanation}</span>
+                        <span>{formatMathPowerText(m.explanation)}</span>
                       </div>
                     </div>
                   ))}

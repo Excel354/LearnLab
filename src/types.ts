@@ -11,6 +11,8 @@ export interface StudentProfile {
   id: string;
   name: string;
   email: string;
+  photoURL?: string;
+  avatarColor?: string;
   educationLevel: EducationLevel;
   grade: AcademicGrade;
   country: string;

@@ -39,6 +39,8 @@ service cloud.firestore {
         && (!('institution' in data) || (data.institution is string && data.institution.size() <= 150))
         && (!('faculty' in data) || (data.faculty is string && data.faculty.size() <= 100))
         && (!('course' in data) || (data.course is string && data.course.size() <= 100))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000000))
+        && (!('avatarColor' in data) || (data.avatarColor is string && data.avatarColor.size() <= 50))
         && data.subjects is list && data.subjects.size() <= 30
         && data.targetExams is list && data.targetExams.size() <= 20
         && (!('studyStreakDays' in data) || data.studyStreakDays is number)

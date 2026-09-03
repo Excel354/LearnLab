@@ -494,7 +494,7 @@ export const SEED_PAST_QUESTIONS: QuizQuestion[] = [
     ],
     correctAnswer: 'A. x = 3 or x = -1/2',
     correctOptionIndex: 0,
-    explanation: 'Factoring: $2x^2 - 6x + x - 3 = 0 \\implies 2x(x - 3) + 1(x - 3) = 0 \\implies (2x + 1)(x - 3) = 0$. Hence, $x = 3$ or $x = -1/2$.',
+    explanation: 'Factoring: 2x raised to the power of 2 - 6x + x - 3 = 0 ⟹ 2x(x - 3) + 1(x - 3) = 0 ⟹ (2x + 1)(x - 3) = 0. Hence, x = 3 or x = -1/2.',
   },
 
   // JAMB Biology
@@ -604,7 +604,7 @@ export const SEED_PAST_QUESTIONS: QuizQuestion[] = [
     ],
     correctAnswer: 'B. 49',
     correctOptionIndex: 1,
-    explanation: 'The pattern is consecutive square numbers: $2^2=4, 3^2=9, 4^2=16, 5^2=25, 6^2=36$. The next number is $7^2 = 49$.',
+    explanation: 'The pattern is consecutive square numbers: 2 raised to the power of 2 = 4, 3 raised to the power of 2 = 9, 4 raised to the power of 2 = 16, 5 raised to the power of 2 = 25, 6 raised to the power of 2 = 36. The next number is 7 raised to the power of 2 = 49.',
   },
 
   // University GST 101
@@ -780,6 +780,6 @@ export const SEED_PAST_QUESTIONS: QuizQuestion[] = [
     ],
     correctAnswer: 'C. 27',
     correctOptionIndex: 2,
-    explanation: '$11011_2 = (1 \\times 2^4) + (1 \\times 2^3) + (0 \\times 2^2) + (1 \\times 2^1) + (1 \\times 2^0) = 16 + 8 + 0 + 2 + 1 = 27_{10}$.',
+    explanation: '11011 (base 2) = (1 × 2 raised to the power of 4) + (1 × 2 raised to the power of 3) + (0 × 2 raised to the power of 2) + (1 × 2 raised to the power of 1) + (1 × 2 raised to the power of 0) = 16 + 8 + 0 + 2 + 1 = 27 (base 10).',
   },
 ];

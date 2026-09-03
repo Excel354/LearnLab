@@ -18,6 +18,7 @@ import {
 import { Logo } from './Logo';
 import { StudentProfile, StudyBuddyDailyLimit } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { getAvatarColor } from '../utils/avatarColor';
 
 interface NavbarProps {
   currentTab: string;
@@ -38,6 +39,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [authLoading, setAuthLoading] = React.useState(false);
 
+  const currentUsername = profile.name || user?.displayName || user?.email || 'Scholar';
+  const initialLetter = currentUsername.trim().charAt(0).toUpperCase() || 'S';
+  const avatarBgColor = profile.avatarColor || getAvatarColor(currentUsername);
+
   const handleSignIn = async () => {
     try {
       setAuthLoading(true);
@@ -50,8 +55,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const navItems = [
-    { id: 'home', label: 'Home', icon: GraduationCap },
-    { id: 'study', label: 'Study Mode', icon: BookOpen, badge: 'Summarizer & Flashcards' },
+    { id: 'home', label: 'Home', icon: BookOpen },
+    { id: 'dashboard', label: 'Dashboard', icon: GraduationCap },
+    { id: 'study', label: 'Study Mode', icon: Sparkles, badge: 'Summarizer & Flashcards' },
     { id: 'examprep', label: 'ExamPrep AI', icon: Zap, badge: 'Past Questions & Mocks' },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'planner', label: 'Study Planner', icon: Calendar },
@@ -97,25 +103,35 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </nav>
 
-          {/* Right Action Elements: [Account] [StudyBuddy AI] (Single unified account entry point) */}
+          {/* Right Action Elements: [Profile] [StudyBuddy AI] */}
           <div className="hidden sm:flex items-center gap-3">
-            {/* Unified Account Management Button (Single Entry Point) */}
+            {/* Student Profile Entry Point */}
             <button
-              id="nav-account-entry-btn"
-              onClick={() => setCurrentTab('account')}
-              title={`Unified Account Management (${user?.email || profile.name})`}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                currentTab === 'account'
+              id="nav-profile-entry-btn"
+              onClick={() => setCurrentTab('profile')}
+              title={`Student Profile (${currentUsername})`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                currentTab === 'profile' || currentTab === 'account'
                   ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-2xs ring-2 ring-blue-500/20'
                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
               }`}
             >
-              {user ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              {profile.photoURL || user?.photoURL ? (
+                <img
+                  src={profile.photoURL || user?.photoURL || ''}
+                  alt={currentUsername}
+                  referrerPolicy="no-referrer"
+                  className="w-5 h-5 rounded-full object-cover border border-slate-200"
+                />
               ) : (
-                <User className="w-3.5 h-3.5 text-slate-500" />
+                <div
+                  style={{ backgroundColor: avatarBgColor }}
+                  className="w-5 h-5 rounded-full text-white font-bold text-[11px] flex items-center justify-center shadow-2xs select-none"
+                >
+                  {initialLetter}
+                </div>
               )}
-              <span>Account</span>
+              <span>Profile</span>
             </button>
 
             {/* If not logged in, quick sign-in option */}
@@ -179,9 +195,21 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="md:hidden border-b border-slate-200 bg-white px-4 pt-3 pb-5 space-y-2 shadow-lg animate-in slide-in-from-top duration-200">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                {profile.name.charAt(0)}
-              </div>
+              {profile.photoURL || user?.photoURL ? (
+                <img
+                  src={profile.photoURL || user?.photoURL || ''}
+                  alt={currentUsername}
+                  referrerPolicy="no-referrer"
+                  className="w-9 h-9 rounded-xl object-cover border border-slate-200"
+                />
+              ) : (
+                <div
+                  style={{ backgroundColor: avatarBgColor }}
+                  className="w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-xs select-none"
+                >
+                  {initialLetter}
+                </div>
+              )}
               <div>
                 <p className="text-sm font-bold text-slate-900">{profile.name}</p>
                 <p className="text-xs text-blue-600 font-semibold">{profile.grade} • {profile.country}</p>
@@ -238,16 +266,30 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Ask StudyBuddy AI ({studyBuddyLimit.usedCount}/4)</span>
             </button>
             <button
-              id="mobile-menu-account"
+              id="mobile-menu-profile"
               onClick={() => {
                 setMobileMenuOpen(false);
-                setCurrentTab('account');
+                setCurrentTab('profile');
               }}
-              title="Unified Account Management"
-              className="px-3.5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-50"
+              title="Student Profile"
+              className="px-3.5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-slate-50"
             >
-              <User className="w-4 h-4" />
-              <span className="text-xs font-bold">Account</span>
+              {profile.photoURL || user?.photoURL ? (
+                <img
+                  src={profile.photoURL || user?.photoURL || ''}
+                  alt={currentUsername}
+                  referrerPolicy="no-referrer"
+                  className="w-4 h-4 rounded-full object-cover"
+                />
+              ) : (
+                <div
+                  style={{ backgroundColor: avatarBgColor }}
+                  className="w-4 h-4 rounded-full text-white font-bold text-[9px] flex items-center justify-center select-none"
+                >
+                  {initialLetter}
+                </div>
+              )}
+              <span className="text-xs font-bold">Profile</span>
             </button>
           </div>
         </div>

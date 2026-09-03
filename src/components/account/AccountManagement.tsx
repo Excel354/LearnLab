@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User,
   Mail,
@@ -24,6 +24,10 @@ import {
   Database,
   X,
   Flame,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -36,6 +40,7 @@ import {
   QuizResult,
 } from '../../types';
 import { SUBJECTS_BY_LEVEL } from '../../data/curriculumData';
+import { getAvatarColor } from '../../utils/avatarColor';
 
 interface AccountManagementProps {
   profile: StudentProfile;
@@ -82,6 +87,111 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
 
   // Sign out confirmation state
   const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
+
+  // Profile Picture & Camera States
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState<boolean>(false);
+  const [photoMode, setPhotoMode] = useState<'options' | 'camera'>('options');
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentUsername = name || user?.displayName || user?.email || 'Scholar';
+  const initialLetter = currentUsername.trim().charAt(0).toUpperCase() || 'S';
+  const avatarBgColor = profile.avatarColor || getAvatarColor(currentUsername);
+
+  const startCamera = async (facing: 'user' | 'environment' = cameraFacing) => {
+    setCameraError(null);
+    setCapturedPreview(null);
+    try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: false,
+      });
+      setCameraStream(stream);
+      setPhotoMode('camera');
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err: any) {
+      console.error('Camera access error:', err);
+      setCameraError(
+        'Could not access camera device. Please allow camera permissions, or choose a file from your photos below.'
+      );
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  const snapPhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 480;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      setCapturedPreview(dataUrl);
+      stopCamera();
+    }
+  };
+
+  const handleSavePhoto = (photoDataUrl: string) => {
+    const updated: StudentProfile = {
+      ...profile,
+      photoURL: photoDataUrl,
+      avatarColor: avatarBgColor,
+    };
+    onSaveProfile(updated);
+    setIsPhotoModalOpen(false);
+    stopCamera();
+    setCapturedPreview(null);
+    setSaveSuccessMessage('Profile picture updated successfully!');
+    setTimeout(() => setSaveSuccessMessage(null), 3000);
+  };
+
+  const handleRemovePhoto = () => {
+    const updated: StudentProfile = {
+      ...profile,
+      photoURL: undefined,
+      avatarColor: avatarBgColor,
+    };
+    onSaveProfile(updated);
+    setIsPhotoModalOpen(false);
+    stopCamera();
+    setCapturedPreview(null);
+    setSaveSuccessMessage('Profile picture removed. Showing custom letter avatar.');
+    setTimeout(() => setSaveSuccessMessage(null), 3000);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Please select an image smaller than 8MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        handleSavePhoto(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const gradeOptions: Record<EducationLevel, string[]> = {
     primary: ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'],
@@ -189,16 +299,16 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
           <span>Settings</span>
           <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-          <span className="text-blue-700">Account Management</span>
+          <span className="text-blue-700">Profile</span>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Account Management
+              Student Profile
             </h1>
             <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-              Manage your personal student details, cloud authentication credentials, security
-              settings, and privacy controls.
+              Manage your personal student details, profile photo, curriculum settings, security
+              credentials, and privacy controls.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -216,6 +326,17 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
                 Sign in with Google
               </button>
             )}
+
+            {/* Functional Sign Out Button */}
+            <button
+              id="profile-header-signout-btn"
+              onClick={handleLogout}
+              disabled={isSigningOut}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors shadow-xs"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{isSigningOut ? 'Signing out...' : 'Sign Out'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -226,19 +347,40 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
           <GraduationCap className="w-64 h-64 text-white" />
         </div>
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            {user?.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt={name}
-                referrerPolicy="no-referrer"
-                className="w-16 h-16 rounded-2xl border-2 border-white/20 object-cover shadow-md"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white font-black text-2xl flex items-center justify-center border-2 border-white/20 shadow-md">
-                {name.charAt(0).toUpperCase()}
-              </div>
-            )}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
+            <div className="flex flex-col items-center sm:items-start">
+              {profile.photoURL || user?.photoURL ? (
+                <img
+                  src={profile.photoURL || user?.photoURL || ''}
+                  alt={name}
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-white/30 object-cover shadow-md shrink-0"
+                />
+              ) : (
+                <div
+                  style={{ backgroundColor: avatarBgColor }}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl text-white font-black text-2xl sm:text-3xl flex items-center justify-center border-2 border-white/30 shadow-md select-none shrink-0"
+                >
+                  {initialLetter}
+                </div>
+              )}
+              {/* Button to add/change profile picture */}
+              <button
+                id="profile-picture-edit-btn"
+                type="button"
+                onClick={() => {
+                  setIsPhotoModalOpen(true);
+                  setPhotoMode('options');
+                  setCameraError(null);
+                  setCapturedPreview(null);
+                }}
+                className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-semibold backdrop-blur-md transition-all border border-white/20 shadow-xs"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>{profile.photoURL || user?.photoURL ? 'Change Photo' : 'Add Profile Picture'}</span>
+              </button>
+            </div>
+
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl sm:text-2xl font-black text-white">{name}</h2>
@@ -911,6 +1053,222 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Picture Modal (Take a Photo or Select from Existing Files) */}
+      {isPhotoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Profile Picture</h3>
+                  <p className="text-xs text-slate-500">
+                    Take a photo or choose an existing photo from your files
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  stopCamera();
+                  setIsPhotoModalOpen(false);
+                  setPhotoMode('options');
+                  setCapturedPreview(null);
+                }}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5">
+              {cameraError && (
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <span>{cameraError}</span>
+                </div>
+              )}
+
+              {/* Hidden file inputs */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {photoMode === 'options' ? (
+                <div className="space-y-4">
+                  {/* Current Avatar Preview */}
+                  <div className="flex flex-col items-center justify-center py-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    {profile.photoURL || user?.photoURL ? (
+                      <img
+                        src={profile.photoURL || user?.photoURL || ''}
+                        alt="Current Profile"
+                        className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-md"
+                      />
+                    ) : (
+                      <div
+                        style={{ backgroundColor: avatarBgColor }}
+                        className="w-24 h-24 rounded-full text-white font-black text-4xl flex items-center justify-center border-4 border-white shadow-md select-none"
+                      >
+                        {initialLetter}
+                      </div>
+                    )}
+                    <span className="text-xs font-semibold text-slate-500 mt-2">
+                      {profile.photoURL
+                        ? 'Custom Profile Picture Active'
+                        : `Default Letter Avatar (${initialLetter})`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Option 1: Take Photo via Camera */}
+                    <button
+                      type="button"
+                      id="modal-take-photo-btn"
+                      onClick={() => startCamera('user')}
+                      className="p-4 rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left flex flex-col items-start gap-2 group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Camera className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">Take a Photo</span>
+                        <span className="text-[11px] text-slate-500 block">Use device webcam or camera</span>
+                      </div>
+                    </button>
+
+                    {/* Option 2: Choose from Files / Photos */}
+                    <button
+                      type="button"
+                      id="modal-select-file-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-4 rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition-all text-left flex flex-col items-start gap-2 group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">
+                          Select from Files or Photos
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">
+                          Upload from storage or gallery
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Remove photo option if one is set */}
+                  {profile.photoURL && (
+                    <div className="pt-2 border-t border-slate-100 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={handleRemovePhoto}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 py-1.5 px-3 rounded-lg hover:bg-rose-50 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Remove Custom Photo & Use Letter Avatar</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Camera Mode */
+                <div className="space-y-4">
+                  <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-square max-w-xs mx-auto shadow-inner flex items-center justify-center">
+                    {capturedPreview ? (
+                      <img
+                        src={capturedPreview}
+                        alt="Captured Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <>
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Circle overlay guide */}
+                        <div className="absolute inset-0 border-2 border-dashed border-white/50 rounded-full m-6 pointer-events-none" />
+                      </>
+                    )}
+                  </div>
+
+                  {/* Camera Action Buttons */}
+                  <div className="flex items-center justify-center gap-3">
+                    {capturedPreview ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCapturedPreview(null);
+                            startCamera(cameraFacing);
+                          }}
+                          className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+                        >
+                          Retake Photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSavePhoto(capturedPreview)}
+                          className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all"
+                        >
+                          Use This Photo
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            stopCamera();
+                            setPhotoMode('options');
+                          }}
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newFacing = cameraFacing === 'user' ? 'environment' : 'user';
+                            setCameraFacing(newFacing);
+                            startCamera(newFacing);
+                          }}
+                          className="p-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                          title="Switch Camera"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          id="snap-photo-trigger-btn"
+                          onClick={snapPhoto}
+                          className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all flex items-center gap-1.5"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Snap Photo</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

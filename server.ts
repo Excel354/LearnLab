@@ -163,7 +163,8 @@ TASK:
    - Markdown Study Guide: Formatted with headers, comparison tables, and structured takeaways.
    - Glossary: Key domain terms defined in the text.
    - Cheat Sheet: Categorized formulas, rules, or high-yield bullet points.
-   - Revision Checklist: Actionable mastery milestones based on the note's sections.`;
+   - Revision Checklist: Actionable mastery milestones based on the note's sections.
+5. MATHEMATICS NOTATION RULE: For all Mathematics questions, options, and explanations, NEVER use the '^' symbol for exponents or powers. Always write out 'raised to the power of' (e.g. '2 raised to the power of 4' or 'x raised to the power of 2' or '10 raised to the power of -3') so novice students can easily understand.`;
 
       contents.push({ text: prompt });
 
@@ -543,7 +544,8 @@ Important Guidelines:
 3. Have 1 verified correct answer matching one of the options.
 4. Have 0-based index of correct option (0 for A, 1 for B, 2 for C, 3 for D).
 5. Have a step-by-step educational explanation teaching why the correct answer is right and clarifying key concepts.
-6. Tag each question with its specific curriculum topic.`;
+6. Tag each question with its specific curriculum topic.
+7. CRITICAL MATHEMATICS NOTATION RULE: In any Mathematics questions, options, or explanations, NEVER use the '^' symbol for exponents or powers. Instead, write out 'raised to the power of' (e.g. '2 raised to the power of 4', 'x raised to the power of 2', '10 raised to the power of -3') for novices to understand.`;
       } else {
         prompt = `Generate exactly ${numQuestions} high-yield multiple choice practice questions for the standardized examination: "${examName || 'JAMB / UTME / WAEC'}".
 Subject: ${subject || 'General'}
@@ -557,7 +559,8 @@ Each question must:
 3. Have 1 verified correct answer matching one of the options.
 4. Have 0-based index of correct option (0 for A, 1 for B, 2 for C, 3 for D).
 5. Have a step-by-step educational explanation teaching why the correct answer is right and why distractors are wrong.
-6. Specify the exact topic.`;
+6. Specify the exact topic.
+7. CRITICAL MATHEMATICS NOTATION RULE: In any Mathematics questions, options, or explanations, NEVER use the '^' symbol for exponents or powers. Instead, write out 'raised to the power of' (e.g. '2 raised to the power of 4', 'x raised to the power of 2', '10 raised to the power of -3') for novices to understand.`;
       }
 
       let formatted: any[] = [];
