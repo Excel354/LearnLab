@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImage from '../assets/images/learnlab_logo_1788341344137.jpg';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
@@ -16,7 +17,7 @@ export const Logo: React.FC<LogoProps> = ({
   const [imageLoaded, setImageLoaded] = useState(true);
 
   // Logo asset generated from the user's uploaded image
-  const logoImageSrc = '/src/assets/images/learnlab_logo_1788341344137.jpg';
+  const logoImageSrc = logoImage;
 
   const sizeClasses = {
     sm: {
