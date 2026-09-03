@@ -11,7 +11,7 @@ export const DEFAULT_PROFILE: StudentProfile = {
   targetExams: [],
   examDates: {},
   studyStreakDays: 0,
-  lastActiveDate: new Date().toISOString().split('T')[0],
+  lastActiveDate: '',
   isPremium: false,
   onboardingCompleted: true,
 };

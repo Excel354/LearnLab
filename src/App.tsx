@@ -40,6 +40,7 @@ import {
   clearAllStoredUserData,
   calculateExamReadiness,
 } from './utils/storage';
+import { updateLoginStreak } from './utils/streak';
 import {
   syncUserProfile,
   syncStudyNote,
@@ -118,25 +119,37 @@ export const App: React.FC = () => {
     // Move away from landing page to dashboard
     setCurrentTab((prev) => (prev === 'home' ? 'dashboard' : prev));
 
+    // Calculate consecutive login streak immediately for logged-in session
+    setProfile((prev) => {
+      const { updatedProfile } = updateLoginStreak(prev);
+      saveStoredProfile(updatedProfile);
+      return updatedProfile;
+    });
+
     // Subscribe to Firestore collections in real-time
     const unsubscribe = subscribeToUserData(user.uid, {
       onProfile: (remoteProfile) => {
         if (remoteProfile) {
-          // Returning user: restore all profile data from Firestore
-          setProfile(remoteProfile);
-          saveStoredProfile(remoteProfile);
+          // Returning user: calculate consecutive daily login streak
+          const { updatedProfile, streakChanged } = updateLoginStreak(remoteProfile);
+          setProfile(updatedProfile);
+          saveStoredProfile(updatedProfile);
+          if (streakChanged) {
+            syncUserProfile(updatedProfile);
+          }
         } else {
-          // Brand new user: initialize clean default profile with "NEW USER"
-          const newProfile: StudentProfile = {
+          // Brand new user: initialize clean default profile with "NEW USER" and initial login streak
+          const baseProfile: StudentProfile = {
             ...DEFAULT_PROFILE,
             id: user.uid,
             email: user.email || '',
             name: user.displayName || 'NEW USER',
             onboardingCompleted: true,
           };
-          setProfile(newProfile);
-          saveStoredProfile(newProfile);
-          syncUserProfile(newProfile);
+          const { updatedProfile } = updateLoginStreak(baseProfile);
+          setProfile(updatedProfile);
+          saveStoredProfile(updatedProfile);
+          syncUserProfile(updatedProfile);
         }
       },
       onNotes: (remoteNotes) => {

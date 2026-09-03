@@ -67,7 +67,7 @@ export const ProgressDashboard: React.FC<ProgressDashboardProps> = ({
 
         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-bold">
           <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
-          <span>{profile.studyStreakDays} Day Study Streak</span>
+          <span>{profile.studyStreakDays} {profile.studyStreakDays === 1 ? 'Day' : 'Days'} Streak</span>
         </div>
       </div>
 

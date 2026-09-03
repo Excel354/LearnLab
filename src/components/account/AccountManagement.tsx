@@ -416,10 +416,10 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
               </div>
               <div>
                 <div className="text-lg font-black text-white leading-none">
-                  {profile.studyStreakDays || 1} Day Streak
+                  {profile.studyStreakDays} {profile.studyStreakDays === 1 ? 'Day' : 'Days'} Streak
                 </div>
                 <div className="text-[11px] text-amber-200 font-semibold mt-0.5">
-                  Daily Study Rhythm
+                  {profile.studyStreakDays > 0 ? 'Consecutive Daily Login' : 'Log in daily to build streak'}
                 </div>
               </div>
             </div>

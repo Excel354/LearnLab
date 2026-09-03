@@ -6,7 +6,6 @@ import {
   BarChart3,
   Calendar,
   Flame,
-  User,
   Bell,
   Menu,
   X,
@@ -70,7 +69,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'examprep', label: 'ExamPrep AI', icon: Zap, badge: 'Past Questions & Mocks' },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'planner', label: 'Study Planner', icon: Calendar },
-    { id: 'profile', label: 'Profile', icon: User },
   ];
 
 
@@ -239,7 +237,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold text-amber-800">
               <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span>{profile.studyStreakDays} days</span>
+              <span>{profile.studyStreakDays} {profile.studyStreakDays === 1 ? 'day' : 'days'}</span>
             </div>
           </div>
 

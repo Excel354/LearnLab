@@ -77,7 +77,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </span>
             <span className="text-xs text-amber-300 font-bold flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 border border-amber-400/20 rounded-md">
               <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              {profile.studyStreakDays} Day Streak
+              {profile.studyStreakDays} {profile.studyStreakDays === 1 ? 'Day' : 'Days'} Streak
             </span>
           </div>
 
