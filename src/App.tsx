@@ -11,6 +11,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { AccountManagement } from './components/account/AccountManagement';
 import { Logo } from './components/Logo';
 import { useAuth } from './context/AuthContext';
+import { DEFAULT_PROFILE } from './data/initialData';
 import {
   StudentProfile,
   StudyNote,
@@ -57,12 +58,19 @@ import {
 export const App: React.FC = () => {
   const { user } = useAuth();
 
-  // Navigation State
+  // Navigation & Landing View State
+  const [isExploring, setIsExploring] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<string>('home');
   const [examPrepSubTab, setExamPrepSubTab] = useState<string>('practice');
 
+  const isLandingPage = !user && !isExploring;
+
   // Core Persistent State
-  const [profile, setProfile] = useState<StudentProfile>(getStoredProfile());
+  const [profile, setProfile] = useState<StudentProfile>(() => {
+    const p = getStoredProfile();
+    if (p.name === 'Scholar') return { ...p, name: 'NEW USER' };
+    return p;
+  });
   const [notes, setNotes] = useState<StudyNote[]>(getStoredNotes());
   const [mistakes, setMistakes] = useState<MistakeItem[]>(getStoredMistakes());
   const [tasks, setTasks] = useState<StudyPlannerTask[]>(getStoredTasks());
@@ -84,35 +92,51 @@ export const App: React.FC = () => {
   const prevMistakesRef = useRef<MistakeItem[]>(mistakes);
   const prevCountdownsRef = useRef<ExamCountdownItem[]>(countdowns);
 
-  // Synchronize with Firebase Firestore in real-time when authenticated
+  // Synchronize with Firebase Firestore in real-time when authenticated & reset when signed out
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      // When a user signs out:
+      // Reset all data in UI state and local storage, while keeping it stored in Firestore backend!
+      setIsExploring(false);
+      setCurrentTab('home');
+      setNotes([]);
+      setTasks([]);
+      setMistakes([]);
+      setCountdowns([]);
+      setQuizHistory([]);
+      setProfile(DEFAULT_PROFILE);
+      clearAllStoredUserData();
+      saveStoredProfile(DEFAULT_PROFILE);
+      prevNotesRef.current = [];
+      prevTasksRef.current = [];
+      prevMistakesRef.current = [];
+      prevCountdownsRef.current = [];
+      return;
+    }
 
-    // Ensure student profile in state matches user ID & email
-    const updatedProfile: StudentProfile = {
-      ...profile,
-      id: user.uid,
-      email: user.email || profile.email,
-      name: profile.name === 'Scholar' && user.displayName ? user.displayName : profile.name,
-      photoURL: profile.photoURL || user.photoURL || undefined,
-    };
-    setProfile(updatedProfile);
-    saveStoredProfile(updatedProfile);
-    syncUserProfile(updatedProfile);
+    // User is authenticated:
+    // Move away from landing page to dashboard
+    setCurrentTab((prev) => (prev === 'home' ? 'dashboard' : prev));
 
-    // Initial backup of existing local data to Firestore if not already present
-    notes.forEach((n) => syncStudyNote(user.uid, { ...n, userId: user.uid }));
-    tasks.forEach((t) => syncPlannerTask(user.uid, { ...t, userId: user.uid }));
-    mistakes.forEach((m) => syncMistakeItem(user.uid, { ...m, userId: user.uid }));
-    countdowns.forEach((c) => syncCountdownItem(user.uid, { ...c, userId: user.uid }));
-    quizHistory.forEach((q) => syncQuizResult(user.uid, { ...q, userId: user.uid }));
-
-    // Subscribe to Firestore collections
+    // Subscribe to Firestore collections in real-time
     const unsubscribe = subscribeToUserData(user.uid, {
       onProfile: (remoteProfile) => {
         if (remoteProfile) {
+          // Returning user: restore all profile data from Firestore
           setProfile(remoteProfile);
           saveStoredProfile(remoteProfile);
+        } else {
+          // Brand new user: initialize clean default profile with "NEW USER"
+          const newProfile: StudentProfile = {
+            ...DEFAULT_PROFILE,
+            id: user.uid,
+            email: user.email || '',
+            name: user.displayName || 'NEW USER',
+            onboardingCompleted: true,
+          };
+          setProfile(newProfile);
+          saveStoredProfile(newProfile);
+          syncUserProfile(newProfile);
         }
       },
       onNotes: (remoteNotes) => {
@@ -302,6 +326,46 @@ export const App: React.FC = () => {
     setIsStudyBuddyOpen(true);
   };
 
+  // If user is neither logged in nor exploring, display ONLY the landing home page
+  if (isLandingPage) {
+    return (
+      <div className="min-h-screen flex flex-col bg-slate-50/50 text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-900">
+        <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+          <WelcomeHome
+            profile={profile}
+            onNavigate={(tab) => {
+              if (tab !== 'home') {
+                setIsExploring(true);
+              }
+              handleNavigate(tab);
+            }}
+            onSaveProfile={handleUpdateProfile}
+            onExplore={() => {
+              setIsExploring(true);
+              handleNavigate('dashboard');
+            }}
+          />
+        </main>
+
+        {/* Minimal Landing Footer */}
+        <footer className="border-t border-slate-200 bg-white py-8 px-4 sm:px-6 lg:px-8 mt-auto">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Logo size="sm" showTagline={true} />
+            </div>
+
+            <p className="text-xs text-slate-500 text-center sm:text-right">
+              Curriculum aligned with WAEC, JAMB/UTME, NECO, BECE, National Common Entrance & University standards.
+            </p>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // Active view when authenticated or exploring (Home is not visible here)
+  const activeTab = currentTab === 'home' ? 'dashboard' : currentTab;
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50/50 text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-900">
       {/* Onboarding Modal for first-time or uncompleted setups */}
@@ -316,25 +380,21 @@ export const App: React.FC = () => {
 
       {/* Main Top Navigation */}
       <Navbar
-        currentTab={currentTab}
+        currentTab={activeTab}
         setCurrentTab={setCurrentTab}
         profile={profile}
         studyBuddyLimit={studyBuddyLimit}
         onOpenStudyBuddy={() => handleOpenStudyBuddyWithContext()}
+        isGuest={!user && isExploring}
+        onExitGuest={() => {
+          setIsExploring(false);
+          setCurrentTab('home');
+        }}
       />
 
       {/* Main View Router */}
       <main className="flex-1 pb-16">
-        {currentTab === 'home' && (
-          <WelcomeHome
-            profile={profile}
-            onNavigate={handleNavigate}
-            onSaveProfile={handleUpdateProfile}
-            onOpenStudyBuddy={handleOpenStudyBuddyWithContext}
-          />
-        )}
-
-        {currentTab === 'dashboard' && (
+        {activeTab === 'dashboard' && (
           <HomeDashboard
             profile={profile}
             notes={notes}
@@ -347,7 +407,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTab === 'study' && (
+        {activeTab === 'study' && (
           <StudyMode
             profile={profile}
             notes={notes}
@@ -357,7 +417,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTab === 'examprep' && (
+        {activeTab === 'examprep' && (
           <ExamPrepMode
             profile={profile}
             mistakes={mistakes}
@@ -370,7 +430,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTab === 'progress' && (
+        {activeTab === 'progress' && (
           <ProgressDashboard
             profile={profile}
             readiness={readiness}
@@ -382,7 +442,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {currentTab === 'planner' && (
+        {activeTab === 'planner' && (
           <StudyPlanner
             profile={profile}
             tasks={tasks}
@@ -392,7 +452,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        {(currentTab === 'profile' || currentTab === 'account') && (
+        {(activeTab === 'profile' || activeTab === 'account') && (
           <AccountManagement
             profile={profile}
             notes={notes}

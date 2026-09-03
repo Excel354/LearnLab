@@ -26,6 +26,8 @@ interface NavbarProps {
   profile: StudentProfile;
   studyBuddyLimit: StudyBuddyDailyLimit;
   onOpenStudyBuddy: () => void;
+  isGuest?: boolean;
+  onExitGuest?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,33 +36,41 @@ export const Navbar: React.FC<NavbarProps> = ({
   profile,
   studyBuddyLimit,
   onOpenStudyBuddy,
+  isGuest,
+  onExitGuest,
 }) => {
   const { user, signInWithGoogle, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [authLoading, setAuthLoading] = React.useState(false);
 
-  const currentUsername = profile.name || user?.displayName || user?.email || 'Scholar';
-  const initialLetter = currentUsername.trim().charAt(0).toUpperCase() || 'S';
+  const currentUsername = profile.name || user?.displayName || user?.email || 'NEW USER';
+  const initialLetter = currentUsername.trim().charAt(0).toUpperCase() || 'N';
   const avatarBgColor = profile.avatarColor || getAvatarColor(currentUsername);
 
   const handleSignIn = async () => {
     try {
       setAuthLoading(true);
       await signInWithGoogle();
-    } catch (err) {
-      console.error('Sign-in failed:', err);
+    } catch (err: any) {
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request'
+      ) {
+        return;
+      }
+      console.warn('Sign-in cancelled or failed:', err);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const navItems = [
-    { id: 'home', label: 'Home', icon: BookOpen },
     { id: 'dashboard', label: 'Dashboard', icon: GraduationCap },
     { id: 'study', label: 'Study Mode', icon: Sparkles, badge: 'Summarizer & Flashcards' },
     { id: 'examprep', label: 'ExamPrep AI', icon: Zap, badge: 'Past Questions & Mocks' },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'planner', label: 'Study Planner', icon: Calendar },
+    { id: 'profile', label: 'Profile', icon: User },
   ];
 
 
@@ -72,7 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             id="nav-brand-logo-btn"
             onClick={() => {
-              setCurrentTab('home');
+              setCurrentTab('dashboard');
               setMobileMenuOpen(false);
             }}
             className="flex items-center text-left focus:outline-hidden hover:opacity-95 transition-opacity"
@@ -133,6 +143,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
               <span>Profile</span>
             </button>
+
+            {/* If guest mode, show exit button */}
+            {isGuest && onExitGuest && (
+              <button
+                id="nav-exit-guest-btn"
+                onClick={onExitGuest}
+                title="Exit guest mode and return to landing page"
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all border border-slate-200"
+              >
+                Exit Guest
+              </button>
+            )}
 
             {/* If not logged in, quick sign-in option */}
             {!user && (

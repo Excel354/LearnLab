@@ -259,6 +259,7 @@ export function saveStoredStudyBuddyMessages(msgs: StudyBuddyMessage[]): void {
  */
 export function clearAllStoredUserData(): void {
   try {
+    localStorage.removeItem(KEYS.PROFILE);
     localStorage.removeItem(KEYS.NOTES);
     localStorage.removeItem(KEYS.QUIZ_RESULTS);
     localStorage.removeItem(KEYS.MISTAKES);
@@ -266,6 +267,7 @@ export function clearAllStoredUserData(): void {
     localStorage.removeItem(KEYS.COUNTDOWNS);
     localStorage.removeItem(KEYS.STUDYBUDDY_MESSAGES);
     localStorage.removeItem(KEYS.STUDYBUDDY_LIMIT);
+    localStorage.setItem(KEYS.PROFILE, JSON.stringify(DEFAULT_PROFILE));
   } catch (e) {
     console.error('Failed to clear stored user data', e);
   }

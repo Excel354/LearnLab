@@ -68,7 +68,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
   const { user, signInWithGoogle, logout } = useAuth();
 
   // Profile Edit State
-  const [name, setName] = useState<string>(profile.name || (user?.displayName ?? 'Scholar'));
+  const [name, setName] = useState<string>(profile.name || (user?.displayName ?? 'NEW USER'));
   const [educationLevel, setEducationLevel] = useState<EducationLevel>(profile.educationLevel);
   const [grade, setGrade] = useState<string>(profile.grade);
   const [country, setCountry] = useState<string>(profile.country || 'Nigeria');
@@ -98,8 +98,8 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentUsername = name || user?.displayName || user?.email || 'Scholar';
-  const initialLetter = currentUsername.trim().charAt(0).toUpperCase() || 'S';
+  const currentUsername = name || user?.displayName || user?.email || 'NEW USER';
+  const initialLetter = currentUsername.trim().charAt(0).toUpperCase() || 'N';
   const avatarBgColor = profile.avatarColor || getAvatarColor(currentUsername);
 
   const startCamera = async (facing: 'user' | 'environment' = cameraFacing) => {
@@ -238,7 +238,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
     e.preventDefault();
     const updatedProfile: StudentProfile = {
       ...profile,
-      name: name.trim() || 'Scholar',
+      name: name.trim() || 'NEW USER',
       educationLevel,
       grade,
       country,
@@ -289,6 +289,20 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err: any) {
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request'
+      ) {
+        return;
+      }
+      console.warn('Google sign-in:', err);
+    }
+  };
+
   const totalUserDataCount =
     notes.length + mistakes.length + tasks.length + countdowns.length + quizHistory.length;
 
@@ -319,7 +333,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
               </span>
             ) : (
               <button
-                onClick={() => signInWithGoogle()}
+                onClick={handleGoogleSignIn}
                 className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-700 text-white hover:bg-blue-800 transition-colors shadow-sm"
               >
                 <LogIn className="w-3.5 h-3.5" />
@@ -500,7 +514,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Amina Bello or Chinedu Okafor"
+                  placeholder="e.g. NEW USER"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
                   required
                 />
@@ -855,7 +869,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
                     devices.
                   </p>
                   <button
-                    onClick={() => signInWithGoogle()}
+                    onClick={handleGoogleSignIn}
                     className="inline-flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-blue-700 text-white text-xs font-semibold hover:bg-blue-800 transition-colors shadow-sm"
                   >
                     <LogIn className="w-4 h-4" />

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   User,
+  UserCredential,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
@@ -13,7 +14,7 @@ import { auth, googleProvider } from '../lib/firebase';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<UserCredential | null>;
   signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -23,7 +24,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  signInWithGoogle: async () => {},
+  signInWithGoogle: async () => null,
   signUpWithEmail: async () => {},
   signInWithEmail: async () => {},
   logout: async () => {},
@@ -42,10 +43,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (): Promise<UserCredential | null> => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      return result;
     } catch (error: any) {
+      // User closed the popup window or canceled the request: normal user dismissal
+      if (
+        error?.code === 'auth/popup-closed-by-user' ||
+        error?.code === 'auth/cancelled-popup-request'
+      ) {
+        return null;
+      }
+      if (error?.code === 'auth/popup-blocked') {
+        throw new Error('Sign-in pop-up was blocked by your browser. Please allow pop-ups for this site and try again.');
+      }
       console.error('Google Sign-In Error:', error);
       throw error;
     }

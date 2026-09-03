@@ -71,7 +71,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const handleFinish = () => {
     const updated: StudentProfile = {
       ...initialProfile,
-      name: name.trim() || 'Scholar',
+      name: name.trim() || 'NEW USER',
       educationLevel,
       grade,
       country,
@@ -124,7 +124,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Chinedu Okafor"
+                  placeholder="e.g. NEW USER"
                   className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 text-sm font-medium outline-hidden"
                 />
               </div>

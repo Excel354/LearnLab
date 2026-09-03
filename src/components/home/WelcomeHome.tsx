@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
 import {
-  BookOpen,
-  Zap,
-  Sparkles,
   ArrowRight,
   CheckCircle2,
   Mail,
@@ -13,29 +10,32 @@ import {
   ShieldCheck,
   GraduationCap,
   Award,
-  Calendar,
   AlertCircle,
-  HelpCircle,
-  Clock,
-  Layers,
+  Sparkles,
+  Zap,
+  BookOpen,
+  Target,
 } from 'lucide-react';
+import logoImage from '../../assets/images/learnlab_logo_1788341344137.jpg';
 import { useAuth } from '../../context/AuthContext';
 import { StudentProfile } from '../../types';
+import { DEFAULT_PROFILE } from '../../data/initialData';
 
 interface WelcomeHomeProps {
   profile: StudentProfile;
   onNavigate: (tab: string) => void;
   onSaveProfile: (profile: StudentProfile) => void;
   onOpenStudyBuddy?: (context?: string) => void;
+  onExplore?: () => void;
 }
 
 export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
   profile,
   onNavigate,
   onSaveProfile,
-  onOpenStudyBuddy,
+  onExplore,
 }) => {
-  const { user, signInWithGoogle, signUpWithEmail, signInWithEmail, logout } = useAuth();
+  const { user, signInWithGoogle, signUpWithEmail, signInWithEmail } = useAuth();
 
   // Auth Mode: 'signup' vs 'signin'
   const [authMode, setAuthMode] = useState<'signup' | 'signin'>('signup');
@@ -46,8 +46,6 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
 
-  const logoSrc = '/src/assets/images/learnlab_logo_1788341344137.jpg';
-
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -56,22 +54,23 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
 
     try {
       if (authMode === 'signup') {
-        if (!email.trim() || !password || !fullName.trim()) {
-          throw new Error('Please fill in your full name, email address, and password.');
+        if (!email.trim() || !password) {
+          throw new Error('Please enter both your email address and password.');
         }
         if (password.length < 6) {
           throw new Error('Password must be at least 6 characters long.');
         }
-        await signUpWithEmail(email.trim(), password, fullName.trim());
+        const nameToUse = fullName.trim() || 'NEW USER';
+        await signUpWithEmail(email.trim(), password, nameToUse);
         onSaveProfile({
-          ...profile,
-          name: fullName.trim(),
+          ...DEFAULT_PROFILE,
+          name: nameToUse,
           email: email.trim(),
         });
         setAuthSuccess('Account created successfully! Welcome to LearnLab.');
         setTimeout(() => {
           onNavigate('dashboard');
-        }, 1200);
+        }, 1000);
       } else {
         if (!email.trim() || !password) {
           throw new Error('Please enter both your email address and password.');
@@ -80,7 +79,7 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
         setAuthSuccess('Signed in successfully! Loading your dashboard...');
         setTimeout(() => {
           onNavigate('dashboard');
-        }, 1200);
+        }, 1000);
       }
     } catch (err: any) {
       let msg = err.message || 'Authentication failed. Please try again.';
@@ -105,38 +104,57 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
     setAuthError(null);
     setAuthLoading(true);
     try {
-      await signInWithGoogle();
-      setAuthSuccess('Signed in with Google successfully!');
-      setTimeout(() => {
-        onNavigate('dashboard');
-      }, 1000);
+      const userCred = await signInWithGoogle();
+      if (userCred) {
+        setAuthSuccess('Signed in with Google successfully!');
+        setTimeout(() => {
+          onNavigate('dashboard');
+        }, 800);
+      }
     } catch (err: any) {
-      setAuthError(err.message || 'Google sign in failed. Please try again.');
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request'
+      ) {
+        return;
+      }
+      let msg = err.message || 'Google sign in failed. Please try again.';
+      if (err?.code === 'auth/popup-blocked' || msg.includes('blocked')) {
+        msg = 'Sign-in pop-up was blocked by your browser. Please allow pop-ups for this site and try again.';
+      }
+      setAuthError(msg);
     } finally {
       setAuthLoading(false);
     }
   };
 
+  const handleTriggerExplore = () => {
+    if (onExplore) {
+      onExplore();
+    } else {
+      onNavigate('dashboard');
+    }
+  };
+
   return (
     <div className="min-h-full space-y-12 pb-16">
-      {/* HERO SECTION WITH VERY VISIBLE LARGE LOGO & TAGLINE */}
+      {/* HERO SECTION WITH LARGE LOGO, TAGLINE, AUTH & EXPLORE ACTION */}
       <section
         id="welcome-hero"
         className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-blue-50/70 via-white to-slate-50 border border-slate-200/80 p-8 sm:p-14 text-center shadow-xs"
       >
-        {/* Subtle decorative background glow */}
+        {/* Subtle background glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 max-w-3xl mx-auto flex flex-col items-center">
-          {/* Very Visible and Large Logo */}
+          {/* Large Visible Logo */}
           <div className="relative group mb-6">
             <div className="w-36 h-36 sm:w-48 sm:h-48 rounded-3xl bg-white p-3 shadow-2xl border-4 border-white ring-8 ring-blue-500/10 flex items-center justify-center overflow-hidden transition-transform duration-300 hover:scale-105">
               <img
-                src={logoSrc}
+                src={logoImage}
                 alt="LearnLab Logo"
                 className="w-full h-full object-contain rounded-2xl"
                 onError={(e) => {
-                  // Graceful fallback if image path resolution fails
                   (e.target as HTMLElement).style.display = 'none';
                 }}
               />
@@ -151,50 +169,42 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
             LearnLab
           </h1>
 
-          {/* User Requested Exact Tagline under the logo */}
+          {/* Tagline */}
           <div className="mt-3 inline-block px-5 py-2 rounded-full bg-blue-600 text-white font-black text-sm sm:text-base tracking-[0.25em] shadow-lg shadow-blue-600/20 uppercase">
-            STUDY. PRACTICE EXCEL.
+            STUDY. PRACTICE. EXCEL.
           </div>
 
-          {/* Welcoming Message */}
+          {/* Persuasive Message */}
           <p className="mt-5 text-sm sm:text-base text-slate-600 max-w-2xl leading-relaxed font-normal">
-            Welcome to <strong className="text-slate-900 font-semibold">LearnLab</strong> — Africa's premier AI-powered learning and examination preparation platform. Whether you are in Primary school, Junior/Senior Secondary preparing for WAEC, JAMB, or NECO, or tackling University semester courses, LearnLab equips you to study smarter and achieve academic excellence.
+            Welcome to <strong className="text-slate-900 font-semibold">LearnLab</strong> — Africa's premier AI-powered learning and examination preparation platform. Whether you are in Primary, Junior or Senior Secondary preparing for <span className="font-semibold text-slate-800">WAEC, JAMB/UTME, NECO, or BECE</span>, or tackling university coursework, LearnLab equips you with curriculum-calibrated intelligence to study smarter and excel with distinction.
           </p>
 
-          {/* Welcome User Status if already signed in */}
+          {/* User Status if already signed in */}
           {user ? (
-            <div className="mt-8 p-6 rounded-3xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white w-full max-w-xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-center sm:text-left">
+            <div className="mt-8 p-6 rounded-3xl bg-gradient-to-r from-blue-900 to-indigo-900 text-white w-full max-w-md shadow-xl flex items-center justify-between gap-4">
+              <div className="text-left">
                 <span className="text-[11px] font-bold text-blue-200 uppercase tracking-wider">
                   Signed in as
                 </span>
                 <h3 className="text-lg font-black text-white">
-                  {profile.name || user.displayName || 'Scholar'}
+                  {profile.name || user.displayName || 'NEW USER'}
                 </h3>
                 <p className="text-xs text-blue-100/80 mt-0.5">
-                  {profile.grade} • {profile.country} Curriculum
+                  {user.email}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  id="go-to-dashboard-btn"
-                  onClick={() => onNavigate('dashboard')}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5"
-                >
-                  <span>Go to Dashboard</span>
-                  <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                </button>
-                <button
-                  onClick={() => logout()}
-                  className="px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs transition-colors"
-                >
-                  Sign Out
-                </button>
-              </div>
+              <button
+                id="go-to-dashboard-btn"
+                onClick={() => onNavigate('dashboard')}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5 flex-shrink-0"
+              >
+                <span>Go to Dashboard</span>
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
             </div>
           ) : (
-            /* SIGN UP & SIGN IN OPTION BOX */
+            /* AUTHENTICATION & GUEST EXPLORE CONTAINER */
             <div
               id="auth-container"
               className="mt-8 w-full max-w-md bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xl text-left animate-in fade-in zoom-in-95 duration-200"
@@ -299,8 +309,7 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
                       <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
-                        required
-                        placeholder="e.g. Chinedu Okafor"
+                        placeholder="e.g. NEW USER"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-xs font-medium text-slate-800 outline-hidden focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-white"
@@ -361,144 +370,127 @@ export const WelcomeHome: React.FC<WelcomeHomeProps> = ({
                 </button>
               </form>
 
-              {/* Guest / Explore directly link */}
-              <div className="pt-4 border-t border-slate-100 text-center">
+              {/* Dedicated Explore Button without signing in */}
+              <div className="mt-6 pt-5 border-t border-slate-100 text-center space-y-2">
                 <button
                   type="button"
-                  onClick={() => onNavigate('dashboard')}
-                  className="text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+                  id="explore-guest-btn"
+                  onClick={handleTriggerExplore}
+                  className="w-full py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center justify-center gap-2 group"
                 >
-                  Want to look around first? Explore as Guest →
+                  <span>Explore LearnLab Without Signing In</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
                 </button>
+                <p className="text-[11px] text-slate-400 font-normal">
+                  Instant preview • Browse past questions, CBT simulation & AI tools as a guest.
+                </p>
               </div>
             </div>
           )}
         </div>
       </section>
 
-      {/* CORE CAPABILITIES OVERVIEW FOR NEW USERS */}
-      <section className="space-y-6">
-        <div className="text-center max-w-xl mx-auto space-y-2">
-          <h2 className="text-2xl font-black text-slate-900">
-            How LearnLab Accelerates Your Learning
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-500">
-            Everything you need to master your curriculum and pass examinations with flying colors.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Card 1: Study Mode */}
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                File-First Note Summarizer
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Upload PDFs, Word docs, photos of notebook pages, or paste notes. LearnLab analyzes your actual document to create summaries, flashcards, diagnostic quizzes, and cheat sheets.
-              </p>
-            </div>
-            <button
-              onClick={() => onNavigate('study')}
-              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700"
-            >
-              <span>Explore Study Mode</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Card 2: ExamPrep AI */}
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Zap className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                ExamPrep & CBT Simulator
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Practice real past questions for WAEC, JAMB, NECO, BECE, and school exams. Realistic CBT mock environment with instant scoring and detailed step-by-step teaching explanations.
-              </p>
-            </div>
-            <button
-              onClick={() => onNavigate('examprep')}
-              className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700"
-            >
-              <span>Practice Past Questions</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Card 3: 24/7 AI StudyBuddy */}
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Sparkles className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                24/7 AI StudyBuddy Tutor
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Stuck on a tricky math equation or complex science theory? StudyBuddy breaks concepts down step by step in friendly, plain English tailored to your level.
-              </p>
-            </div>
-            <button
-              onClick={() => onOpenStudyBuddy ? onOpenStudyBuddy('Hello StudyBuddy! What subjects can you help me with today?') : onNavigate('dashboard')}
-              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700"
-            >
-              <span>Ask StudyBuddy Tutor</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Card 4: Mistake Bank & Progress */}
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Award className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                Mistake Bank & Readiness
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Every quiz or exam error is automatically gathered in your personalized Mistake Bank so you can practice until 100% mastery. Track your Exam Readiness Score in real time.
-              </p>
-            </div>
-            <button
-              onClick={() => onNavigate('progress')}
-              className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700"
-            >
-              <span>View Progress & Analytics</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* QUICK JUMP TO DASHBOARD CTA */}
-      <section className="bg-slate-900 text-white rounded-3xl p-8 sm:p-10 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xl">
-        <div className="space-y-2 text-center sm:text-left">
-          <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">
-            Ready to Begin?
+      {/* PERSUASIVE MODERN VALUE PROPOSITIONS */}
+      <section className="max-w-5xl mx-auto space-y-8 px-4">
+        <div className="text-center space-y-2">
+          <span className="text-xs font-black text-blue-600 tracking-widest uppercase">
+            The LearnLab Advantage
           </span>
-          <h3 className="text-xl sm:text-2xl font-black text-white">
-            Enter Your LearnLab Student Dashboard
-          </h3>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-md">
-            Review your active notes, continue your revision streak, and schedule upcoming exams.
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            Engineered for Exam Excellence & Deep Conceptual Understanding
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto">
+            Traditional studying leaves knowledge gaps hidden until exam day. LearnLab turns passive reading into active, diagnostic retention.
           </p>
         </div>
 
-        <button
-          onClick={() => onNavigate('dashboard')}
-          className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2 flex-shrink-0"
-        >
-          <span>Open Dashboard</span>
-          <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-        </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Proposition 1 */}
+          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:border-blue-200 transition-all flex flex-col justify-between space-y-3">
+            <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Curriculum-Calibrated
+              </h3>
+              <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Strictly mapped to official examination syllabi — WAEC, JAMB/UTME, NECO, BECE, Cambridge, and University level benchmarks.
+              </p>
+            </div>
+            <div className="pt-2 flex items-center gap-1.5 text-[11px] font-bold text-blue-600">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Targeted syllabus coverage</span>
+            </div>
+          </div>
+
+          {/* Proposition 2 */}
+          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:border-emerald-200 transition-all flex flex-col justify-between space-y-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Zap className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Active Recall & CBT Drills
+              </h3>
+              <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Replicate authentic CBT test conditions with real-time timers, automatic scoring, and detailed step-by-step answer explanations.
+              </p>
+            </div>
+            <div className="pt-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Realistic CBT environment</span>
+            </div>
+          </div>
+
+          {/* Proposition 3 */}
+          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs hover:border-indigo-200 transition-all flex flex-col justify-between space-y-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Target className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Zero Guesswork Readiness
+              </h3>
+              <p className="text-xs text-slate-600 mt-1.5 leading-relaxed">
+                Our algorithm isolates recurring weaknesses and aggregates errors into your personal Mistake Bank until you achieve 100% mastery.
+              </p>
+            </div>
+            <div className="pt-2 flex items-center gap-1.5 text-[11px] font-bold text-indigo-600">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Data-driven score optimization</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Accreditation & Exam Badges Row */}
+        <div className="p-6 rounded-3xl bg-slate-900 text-white flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+          <div className="space-y-1 text-center md:text-left">
+            <div className="flex items-center justify-center md:justify-start gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                Trusted Syllabus Standards
+              </span>
+            </div>
+            <h4 className="text-lg font-black text-white">
+              Prepared for Every Stage of Your Academic Journey
+            </h4>
+            <p className="text-xs text-slate-300 max-w-lg">
+              Covering senior and junior secondary examinations, common entrance testing, and university undergraduate degree courses.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {['WAEC', 'JAMB / UTME', 'NECO', 'BECE', 'IGCSE / Cambridge', 'University'].map((exam) => (
+              <span
+                key={exam}
+                className="px-3.5 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-xs font-bold text-slate-200 shadow-2xs"
+              >
+                {exam}
+              </span>
+            ))}
+          </div>
+        </div>
       </section>
     </div>
   );

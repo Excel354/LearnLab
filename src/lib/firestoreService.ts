@@ -261,6 +261,8 @@ export function subscribeToUserData(
       (snap) => {
         if (snap.exists()) {
           callbacks.onProfile?.(snap.data() as StudentProfile);
+        } else {
+          callbacks.onProfile?.(null as any);
         }
       },
       (error) => {

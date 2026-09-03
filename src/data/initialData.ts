@@ -2,7 +2,7 @@ import { StudentProfile, StudyNote, MistakeItem, StudyPlannerTask, ExamCountdown
 
 export const DEFAULT_PROFILE: StudentProfile = {
   id: '',
-  name: 'Scholar',
+  name: 'NEW USER',
   email: '',
   educationLevel: 'senior_secondary',
   grade: 'SS 3',
