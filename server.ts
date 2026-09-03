@@ -3,6 +3,8 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+// @ts-ignore
+import mammoth from 'mammoth';
 
 dotenv.config();
 
@@ -64,43 +66,105 @@ async function startServer() {
     res.json({ status: 'ok', app: 'LearnLab', tagline: 'Study. Practice. Excel' });
   });
 
-  // 1. Process Study Notes & Generate Complete Study Ecosystem
+  // 1. Process Study Notes & Generate Complete Study Ecosystem (File-First Architecture)
   app.post('/api/ai/process-notes', async (req, res) => {
     try {
-      const { text, subject, gradeLevel, topic, fileData, mimeType } = req.body;
+      const { text, subject, gradeLevel, topic, fileData, mimeType, fileName } = req.body;
 
       if (!text && !fileData) {
-        return res.status(400).json({ error: 'Please provide note text or upload a document.' });
+        return res.status(400).json({ error: 'Please upload a study document, image, or paste note text.' });
       }
 
-      const prompt = `You are an elite educational AI engine for "LearnLab" (Tagline: Study. Practice. Excel).
-Process the following study materials for a student in:
-- Education / Grade Level: ${gradeLevel || 'Secondary School'}
-- Subject: ${subject || 'General'}
-- Topic: ${topic || 'General Topic'}
+      // 1. Extract content from Word (.docx) or Text (.txt) files if present
+      let docxText = '';
+      let plainTextFromFile = '';
 
-Please extract, clean, and convert this into a comprehensive, high-quality, level-adapted study ecosystem.
-Generate structured study resources including:
-1. An AI Summary: Clear title, thorough overview, high-yield key points, important concepts with explanations, precise definitions, and real-world examples.
-2. 5 to 10 Flashcards: Focused questions with clear, direct answers and explanatory context for active recall.
-3. 4 to 8 Quiz Questions: Multiple-choice questions (A, B, C, D) with full answer explanations and correct option index (0 to 3).
-4. A structured Markdown Study Guide formatted with headers, comparison table, and key takeaways.
-5. A Glossary of key domain terms.
-6. A quick Cheat Sheet categorized into formulas, laws, or high-yield bullet points.
-7. A Revision Checklist of concrete mastery milestones.
+      if (fileData) {
+        const base64Clean = fileData.replace(/^data:[^;]+;base64,/, '');
+        const lowerName = (fileName || '').toLowerCase();
 
-Input Notes Material:
-${text || 'Please analyze and extract the attached document or image.'}`;
+        if (lowerName.endsWith('.docx') || mimeType?.includes('wordprocessingml') || mimeType?.includes('officedocument')) {
+          try {
+            const buffer = Buffer.from(base64Clean, 'base64');
+            const result = await mammoth.extractRawText({ buffer });
+            docxText = result.value || '';
+          } catch (err: any) {
+            console.warn('[Docx Extract] Error reading word document:', err?.message || err);
+          }
+        } else if (lowerName.endsWith('.txt') || mimeType === 'text/plain') {
+          try {
+            plainTextFromFile = Buffer.from(base64Clean, 'base64').toString('utf-8');
+          } catch (err: any) {
+            console.warn('[Text File Extract] Error reading plain text:', err?.message || err);
+          }
+        }
+      }
 
+      // 2. Prepare multimodal inputs for Gemini
       const contents: any[] = [];
-      if (fileData && mimeType) {
-        contents.push({
-          inlineData: {
-            data: fileData.replace(/^data:[^;]+;base64,/, ''),
-            mimeType: mimeType,
-          },
-        });
+
+      if (fileData) {
+        const lowerName = (fileName || '').toLowerCase();
+        const isPdf = lowerName.endsWith('.pdf') || mimeType === 'application/pdf';
+        const isImage = mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|heic|bmp)$/i.test(lowerName);
+
+        if (isPdf) {
+          contents.push({
+            inlineData: {
+              data: fileData.replace(/^data:[^;]+;base64,/, ''),
+              mimeType: 'application/pdf',
+            },
+          });
+        } else if (isImage) {
+          let finalImageMime = mimeType || 'image/jpeg';
+          if (lowerName.endsWith('.png')) finalImageMime = 'image/png';
+          else if (lowerName.endsWith('.webp')) finalImageMime = 'image/webp';
+          contents.push({
+            inlineData: {
+              data: fileData.replace(/^data:[^;]+;base64,/, ''),
+              mimeType: finalImageMime,
+            },
+          });
+        }
       }
+
+      // Assemble textual material from docx, txt file, and pasted user notes
+      const assembledTextPieces = [
+        docxText ? `Extracted Word Document Content:\n${docxText}` : '',
+        plainTextFromFile ? `Plain Text File Content (${fileName}):\n${plainTextFromFile}` : '',
+        text ? `Student Uploaded Notes / Pasted Text:\n${text}` : '',
+      ].filter(Boolean);
+
+      const assembledMaterial = assembledTextPieces.join('\n\n');
+
+      const prompt = `STRICT FILE-FIRST DIRECTIVE:
+1. THE UPLOADED MATERIAL (FILE, IMAGE/OCR, OR NOTE TEXT) IS THE PRIMARY AND CENTRAL SOURCE OF TRUTH.
+2. Every summary, key point, definition, flashcard, quiz question, and study resource MUST be directly derived from the specific facts, terminology, formulas, and concepts present in this uploaded material.
+3. NEVER generate generic placeholder textbook summaries (e.g. general Biology or Mathematics) that disregard the actual text of the file. If the file is about "Cell Division", every resource must focus specifically on the phases, terms, and concepts in that file.
+4. If the document covers MULTIPLE TOPICS, identify and organize each distinct topic into "detectedTopics" and structure the study guide and flashcards to reflect those exact sections.
+5. OPTIONAL USER METADATA: If the student provided optional context (Class, Subject, or Topic), use it strictly as secondary supporting context. The uploaded file ALWAYS overrides user-provided metadata.
+6. NO FABRICATED CONTENT: If the uploaded material is blank, corrupted, totally illegible, or contains no genuine educational content, set "isContentReadable": false and state why in "unreadableReason". DO NOT invent fake educational content.
+
+${assembledMaterial ? `STUDY MATERIAL:\n${assembledMaterial}\n` : 'STUDY MATERIAL: See attached document/image.'}
+
+OPTIONAL STUDENT CONTEXT (Use strictly as secondary context; do NOT override document content):
+- Provided Class / Level: ${gradeLevel || 'Not specified (infer from material)'}
+- Provided Subject: ${subject || 'Not specified (extract from material)'}
+- Provided Topic: ${topic || 'Not specified (extract from material)'}
+
+TASK:
+1. Thoroughly analyze the material.
+2. Extract the primary subject (e.g. Biology, Chemistry, Physics, Mathematics, English, Economics, Government, Literature, etc.) and primary topic.
+3. If multiple topics are covered, identify all in "detectedTopics".
+4. Generate the structured study ecosystem:
+   - Summary: Specific title, comprehensive overview, high-yield key points, important concepts with explanations, precise definitions, and real-world examples.
+   - Flashcards: 6 to 10 questions testing active recall with clear answers and explanations.
+   - Quizzes: 4 to 8 questions (practice & exam-style) with 4 options, correct answer, correctOptionIndex (0-3), and deep explanations.
+   - Markdown Study Guide: Formatted with headers, comparison tables, and structured takeaways.
+   - Glossary: Key domain terms defined in the text.
+   - Cheat Sheet: Categorized formulas, rules, or high-yield bullet points.
+   - Revision Checklist: Actionable mastery milestones based on the note's sections.`;
+
       contents.push({ text: prompt });
 
       let parsedData: any = null;
@@ -110,11 +174,37 @@ ${text || 'Please analyze and extract the attached document or image.'}`;
           models: ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.7-flash'],
           contents,
           config: {
-            systemInstruction: 'You are an expert curriculum specialist and AI tutor. Produce comprehensive, deeply educational, accurate JSON matching the requested schema. Avoid superficial outputs.',
+            systemInstruction: `You are LearnLab's File-First Educational AI Engine (Tagline: Study. Practice. Excel).
+Your highest priority is fidelity to the student's actual uploaded material.
+1. The uploaded file is your primary and central source of truth.
+2. Every summary, definition, flashcard, and quiz question must come from the actual document.
+3. Never output generic textbook summaries that ignore the actual file content.
+4. If the file is unreadable, blurred, blank, or contains no usable educational content, you MUST set isContentReadable: false and explain in unreadableReason. Never fabricate study materials.`,
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
               properties: {
+                isContentReadable: {
+                  type: Type.BOOLEAN,
+                  description: 'True if the material contains readable educational study content. False if blank, corrupt, or unreadable.',
+                },
+                unreadableReason: {
+                  type: Type.STRING,
+                  description: 'Explanation if the content could not be read or contains no study material.',
+                },
+                detectedSubject: {
+                  type: Type.STRING,
+                  description: 'The primary subject extracted directly from the uploaded material.',
+                },
+                detectedTopic: {
+                  type: Type.STRING,
+                  description: 'The primary topic extracted directly from the uploaded material.',
+                },
+                detectedTopics: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: 'All distinct topics or chapters covered in the document if multi-topic.',
+                },
                 summary: {
                   type: Type.OBJECT,
                   properties: {
@@ -237,70 +327,39 @@ ${text || 'Please analyze and extract the attached document or image.'}`;
                   },
                 },
               },
-              required: ['summary', 'keyPoints', 'flashcards', 'quizzes', 'studyGuideMarkdown', 'glossary', 'cheatSheet', 'revisionChecklist'],
+              required: [
+                'isContentReadable',
+                'detectedSubject',
+                'detectedTopic',
+                'summary',
+                'keyPoints',
+                'flashcards',
+                'quizzes',
+                'studyGuideMarkdown',
+                'glossary',
+                'cheatSheet',
+                'revisionChecklist',
+              ],
             },
           },
         });
         parsedData = JSON.parse(response.text || '{}');
-      } catch (genErr) {
-        console.warn('AI structured generation fallback triggered for notes:', genErr);
-        // Synthesize structured fallback from raw text if model is temporarily unavailable
-        const noteHeading = topic || subject || 'Core Study Summary';
-        const cleanRaw = (text || 'Key learning materials').trim();
-        const sentences = cleanRaw.split(/[.!?]+/).filter(Boolean).map((s: string) => s.trim());
-        const keySentences = sentences.slice(0, 6);
+      } catch (genErr: any) {
+        console.error('[Process Notes] AI generation error:', genErr?.message || genErr);
+        // Rule: NO FABRICATED SUMMARY. If processing fails, report clearly so student can retry or paste text.
+        return res.status(422).json({
+          success: false,
+          error: 'We could not extract readable study content from this document. Please ensure the file contains legible text or photos, or paste your notes directly.',
+          details: genErr?.message,
+        });
+      }
 
-        parsedData = {
-          summary: {
-            title: `${subject || 'Study'} - ${topic || 'Key Concepts'}`,
-            overview: sentences.slice(0, 3).join('. ') + '.',
-            keyPoints: keySentences.length ? keySentences : ['Master primary definitions and core relationships.', 'Practice targeted multiple-choice CBT questions.'],
-            importantConcepts: [
-              { concept: topic || 'Core Principle', explanation: sentences[0] || 'Fundamental law and concept for this unit.' },
-              { concept: 'Practical Application', explanation: 'Understanding real-world exam and problem-solving scenarios.' }
-            ],
-            definitions: [
-              { term: topic || 'Core Subject Unit', definition: 'The central curriculum module under study.' }
-            ],
-            examples: [
-              { title: 'Standard Exam Example', explanation: 'Applying the foundational principles to solve standard past paper questions.' }
-            ]
-          },
-          keyPoints: keySentences.length ? keySentences : ['Review key definitions daily.', 'Test active recall regularly.'],
-          flashcards: [
-            { question: `What is the primary significance of ${topic || subject}?`, answer: sentences[0] || `Understanding ${topic || subject} is essential for exam mastery.`, explanation: 'Core theoretical foundation.', topic: topic || 'General', difficulty: 'easy' },
-            { question: `Key components and properties of ${topic || subject}?`, answer: sentences[1] || 'Primary classifications and key properties.', explanation: 'Structural breakdown.', topic: topic || 'General', difficulty: 'medium' },
-            { question: `How do you apply principles of ${topic || subject} in problems?`, answer: 'By identifying the given variables, selecting the correct formula or principle, and verifying units.', explanation: 'Step-by-step problem methodology.', topic: topic || 'General', difficulty: 'hard' }
-          ],
-          quizzes: [
-            {
-              question: `Which of the following statements best describes ${topic || subject}?`,
-              options: [
-                sentences[0] || `It is the foundational principle of ${subject}`,
-                'It operates independently without any rules',
-                'It is only applicable in non-standard scenarios',
-                'None of the above'
-              ],
-              correctAnswer: sentences[0] || `It is the foundational principle of ${subject}`,
-              correctOptionIndex: 0,
-              explanation: 'This option directly captures the fundamental curriculum definition.',
-              topic: topic || 'General',
-              difficulty: 'medium'
-            }
-          ],
-          studyGuideMarkdown: `# ${subject} — ${topic}\n\n## Overview\n${cleanRaw.slice(0, 400)}...\n\n### Key Concepts\n- Understand core mechanisms and definitions\n- Revise past questions for WAEC/JAMB\n- Test active recall via flashcards`,
-          glossary: [
-            { term: topic || 'Primary Concept', definition: 'The core topic of this study module.' }
-          ],
-          cheatSheet: [
-            { category: 'Key Formulas & Rules', content: ['Verify units before calculating', 'Focus on core definitions and relationships'] }
-          ],
-          revisionChecklist: [
-            { task: `Master ${topic || subject} definitions`, completed: false },
-            { task: 'Complete active recall flashcards session', completed: false },
-            { task: 'Score 80%+ on targeted diagnostic quiz', completed: false }
-          ]
-        };
+      // Check if document content was reported unreadable by AI
+      if (parsedData.isContentReadable === false) {
+        return res.status(422).json({
+          success: false,
+          error: parsedData.unreadableReason || 'The uploaded file could not be read or contains insufficient readable study content. Please upload a clear document, photo, or paste your notes directly.',
+        });
       }
 
       // Populate unique IDs and spaced repetition metadata for flashcards
@@ -322,11 +381,17 @@ ${text || 'Please analyze and extract the attached document or image.'}`;
           id: q.id || `qz-${Date.now()}-${idx}`,
           difficulty: q.difficulty || 'medium',
           sourceType: 'ai_generated',
-          sourceLabel: 'LearnLab AI Diagnostic',
+          sourceLabel: 'LearnLab Note-Derived Diagnostic',
         }));
       }
 
-      return res.json({ success: true, resources: parsedData });
+      return res.json({
+        success: true,
+        resources: parsedData,
+        detectedSubject: parsedData.detectedSubject,
+        detectedTopic: parsedData.detectedTopic,
+        detectedTopics: parsedData.detectedTopics,
+      });
     } catch (err: any) {
       console.error('Error processing notes with AI:', err);
       return res.status(500).json({
@@ -438,27 +503,62 @@ Your role:
     }
   });
 
-  // 3. AI Practice Question Generator for ExamPrep
+  // 3. AI Practice Question Generator for ExamPrep (School Exams & Standardized Exams)
   app.post('/api/ai/generate-questions', async (req, res) => {
     try {
-      const { examName, subject, topic, difficulty, count, educationLevel } = req.body;
+      const {
+        examName,
+        category,
+        classLevel,
+        term,
+        assessmentType,
+        subject,
+        topic,
+        difficulty,
+        count,
+        educationLevel,
+        materialText,
+      } = req.body;
 
-      const numQuestions = Math.min(25, Math.max(3, Number(count) || 5));
+      const numQuestions = Math.min(30, Math.max(3, Number(count) || 5));
+      const isSchoolExam = category === 'school_exam' || Boolean(classLevel && (term || assessmentType));
 
-      const prompt = `Generate exactly ${numQuestions} high-yield multiple choice practice questions for the Nigerian exam: "${examName || 'WAEC / JAMB'}".
+      let systemInstruction = 'You are an expert Nigerian and West African examination author. Return strictly valid JSON adhering to the specified schema.';
+      let prompt = '';
+
+      if (isSchoolExam) {
+        systemInstruction = `You are an expert school teacher and examination author specialized in ${classLevel || educationLevel || 'school'} education in Nigeria and West Africa. You create age-appropriate, syllabus-aligned questions for regular termly school examinations, continuous assessments (CAs), and class tests.`;
+        prompt = `Generate exactly ${numQuestions} high-quality, syllabus-aligned multiple choice practice questions for a normal school examination.
+Academic Level: ${classLevel || educationLevel || 'Secondary School'}
+Subject: ${subject || 'General'}
+Term: ${term || 'Current Term'}
+Assessment Type: ${assessmentType || 'School Examination'}
+${topic && topic !== 'All Topics' ? `Topic: ${topic}` : 'Topics: Standard term curriculum topics for this class and subject'}
+Difficulty Level: ${difficulty || 'medium'}
+${materialText ? `Use the following uploaded school notes, scheme of work, or test paper content to ground the questions directly:\n"""\n${materialText.slice(0, 3000)}\n"""` : ''}
+
+Important Guidelines:
+1. Questions must be age-appropriate and strictly match the curriculum level of ${classLevel || educationLevel}. For Primary 1-6, use clear, simple language and foundational problem-solving. For JSS and SS, match junior/senior secondary national standards.
+2. Have 4 distinct options labelled A, B, C, D.
+3. Have 1 verified correct answer matching one of the options.
+4. Have 0-based index of correct option (0 for A, 1 for B, 2 for C, 3 for D).
+5. Have a step-by-step educational explanation teaching why the correct answer is right and clarifying key concepts.
+6. Tag each question with its specific curriculum topic.`;
+      } else {
+        prompt = `Generate exactly ${numQuestions} high-yield multiple choice practice questions for the standardized examination: "${examName || 'JAMB / UTME / WAEC'}".
 Subject: ${subject || 'General'}
 ${topic && topic !== 'All Topics' ? `Topic: ${topic}` : 'Topics: Standard high-yield curriculum syllabus topics'}
 Difficulty Level: ${difficulty || 'medium'} (Must be strictly ${difficulty || 'medium'})
 Academic Level: ${educationLevel || 'senior_secondary'}
 
 Each question must:
-1. Contain clear, unambiguous stem text.
+1. Contain clear, unambiguous stem text reflecting authentic examination standards.
 2. Have 4 distinct options labelled A, B, C, D.
 3. Have 1 verified correct answer matching one of the options.
 4. Have 0-based index of correct option (0 for A, 1 for B, 2 for C, 3 for D).
 5. Have a step-by-step educational explanation teaching why the correct answer is right and why distractors are wrong.
-6. Specify the exact topic.
-7. Be tagged as AI Practice Question.`;
+6. Specify the exact topic.`;
+      }
 
       let formatted: any[] = [];
       try {
@@ -467,7 +567,7 @@ Each question must:
           models: ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.7-flash'],
           contents: prompt,
           config: {
-            systemInstruction: 'You are an expert exam author for WAEC, NECO, and JAMB UTME. Return strictly valid JSON adhering to the specified schema.',
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.ARRAY,
@@ -492,36 +592,41 @@ Each question must:
         });
 
         const parsed = JSON.parse(response.text || '[]');
+        const displayLabel = isSchoolExam
+          ? `🤖 AI Practice Question (${classLevel || ''} ${term || ''})`.trim()
+          : `🤖 AI Practice Question (${examName || 'Exam'})`;
+
         formatted = parsed.map((q: any, i: number) => ({
           ...q,
           id: `ai-q-${Date.now()}-${i}`,
           subject: subject,
-          examName: examName,
+          examName: isSchoolExam ? `${classLevel || ''} ${subject} (${term || 'School Exam'})` : examName,
           difficulty: difficulty || 'medium',
           sourceType: 'ai_generated',
-          sourceLabel: `🤖 AI Practice Question (${examName})`,
+          sourceLabel: displayLabel,
         }));
       } catch (genErr) {
         console.warn('AI question generation fallback triggered:', genErr);
         // Curated fallback questions for the requested subject/exam
+        const targetLabel = isSchoolExam ? `${classLevel || ''} ${subject} (${term || 'School Exam'})` : (examName || 'Practice Exam');
         formatted = Array.from({ length: numQuestions }).map((_, i) => ({
           id: `ai-q-${Date.now()}-${i}`,
           subject: subject || 'General Studies',
           topic: topic || 'Core Syllabus Topic',
-          examName: examName || 'WAEC / JAMB',
+          examName: targetLabel,
           difficulty: difficulty || 'medium',
-          question: `[${examName || 'Exam'}] In ${subject || 'General Studies'}, which of the following best exemplifies the standard application of ${topic || 'fundamental principles'}?`,
+          question: `[${targetLabel}] In ${subject || 'General Studies'}, which of the following best exemplifies the standard application of ${topic || 'fundamental principles'}?`,
           options: [
-            'Accurate identification and verification of core laws and variables',
-            'Arbitrary guessing without reviewing given parameters',
-            'Applying formulas without standard unit conversion',
-            'Ignoring boundary conditions and assumptions'
+            'A. Accurate identification and verification of core laws and variables',
+            'B. Arbitrary guessing without reviewing given parameters',
+            'C. Applying formulas without standard unit conversion',
+            'D. Ignoring boundary conditions and assumptions'
           ],
-          correctAnswer: 'Accurate identification and verification of core laws and variables',
+          correctAnswer: 'A. Accurate identification and verification of core laws and variables',
           correctOptionIndex: 0,
-          explanation: 'In examination assessments, methodical identification of variables and adherence to foundational principles ensures full score accuracy.',
+          explanation: 'In academic assessments, methodical identification of variables and adherence to foundational principles ensures complete accuracy.',
           sourceType: 'ai_generated',
-          sourceLabel: `🤖 AI Practice Question (${examName || 'Targeted'})`,
+          sourceLabel: `🤖 AI Practice Question (${targetLabel})`,
         }));
       }
 

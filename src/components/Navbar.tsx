@@ -11,9 +11,13 @@ import {
   Menu,
   X,
   Zap,
+  Cloud,
+  CloudCheck,
+  LogIn,
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { StudentProfile, StudyBuddyDailyLimit } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface NavbarProps {
   currentTab: string;
@@ -21,7 +25,6 @@ interface NavbarProps {
   profile: StudentProfile;
   studyBuddyLimit: StudyBuddyDailyLimit;
   onOpenStudyBuddy: () => void;
-  onOpenProfile: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -30,9 +33,21 @@ export const Navbar: React.FC<NavbarProps> = ({
   profile,
   studyBuddyLimit,
   onOpenStudyBuddy,
-  onOpenProfile,
 }) => {
+  const { user, signInWithGoogle, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [authLoading, setAuthLoading] = React.useState(false);
+
+  const handleSignIn = async () => {
+    try {
+      setAuthLoading(true);
+      await signInWithGoogle();
+    } catch (err) {
+      console.error('Sign-in failed:', err);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   const navItems = [
     { id: 'home', label: 'Home', icon: GraduationCap },
@@ -41,6 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'planner', label: 'Study Planner', icon: Calendar },
   ];
+
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
@@ -58,7 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Logo size="md" showTagline={true} />
           </button>
 
-          {/* Desktop Navigation Links */}
+          {/* Desktop Navigation Links: Study Mode | ExamPrep AI | Progress | Study Planner */}
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -81,8 +97,41 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </nav>
 
-          {/* Right Action Elements */}
+          {/* Right Action Elements: [Account] [StudyBuddy AI] (Single unified account entry point) */}
           <div className="hidden sm:flex items-center gap-3">
+            {/* Unified Account Management Button (Single Entry Point) */}
+            <button
+              id="nav-account-entry-btn"
+              onClick={() => setCurrentTab('account')}
+              title={`Unified Account Management (${user?.email || profile.name})`}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                currentTab === 'account'
+                  ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-2xs ring-2 ring-blue-500/20'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+              }`}
+            >
+              {user ? (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              ) : (
+                <User className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <span>Account</span>
+            </button>
+
+            {/* If not logged in, quick sign-in option */}
+            {!user && (
+              <button
+                id="nav-login-entry-btn"
+                onClick={handleSignIn}
+                disabled={authLoading}
+                title="Sign in with Google"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-2xs transition-all"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{authLoading ? '...' : 'Sign In'}</span>
+              </button>
+            )}
+
             {/* StudyBuddy AI Quick Pill Button */}
             <button
               id="studybuddy-quick-btn"
@@ -100,34 +149,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="flex items-center gap-1 text-[10px] text-indigo-700">
                   <span>{studyBuddyLimit.usedCount}/{studyBuddyLimit.maxLimit} replies today</span>
                 </div>
-              </div>
-            </button>
-
-            {/* Study Streak Badge */}
-            <div
-              title={`Active ${profile.studyStreakDays} Day Study Streak`}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200/80 rounded-xl text-amber-800 text-xs font-bold"
-            >
-              <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
-              <span>{profile.studyStreakDays}d</span>
-            </div>
-
-            {/* Student Profile / Grade Pill */}
-            <button
-              id="student-profile-btn"
-              onClick={onOpenProfile}
-              className="flex items-center gap-3 ml-2 pl-3 py-1 rounded-xl hover:bg-slate-100/70 transition-all text-right group"
-            >
-              <div className="flex flex-col text-right">
-                <span className="text-sm font-semibold text-slate-800 leading-tight truncate max-w-[120px]">
-                  {profile.name}
-                </span>
-                <span className="text-xs text-slate-400 leading-tight">
-                  {profile.grade}
-                </span>
-              </div>
-              <div className="w-9 h-9 rounded-full bg-indigo-100 border-2 border-white shadow-xs flex items-center justify-center text-indigo-700 font-bold text-xs">
-                {profile.name.charAt(0)}
               </div>
             </button>
           </div>
@@ -217,14 +238,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Ask StudyBuddy AI ({studyBuddyLimit.usedCount}/4)</span>
             </button>
             <button
-              id="mobile-menu-profile"
+              id="mobile-menu-account"
               onClick={() => {
                 setMobileMenuOpen(false);
-                onOpenProfile();
+                setCurrentTab('account');
               }}
-              className="px-3.5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold"
+              title="Unified Account Management"
+              className="px-3.5 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-slate-50"
             >
               <User className="w-4 h-4" />
+              <span className="text-xs font-bold">Account</span>
             </button>
           </div>
         </div>

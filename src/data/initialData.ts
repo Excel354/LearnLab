@@ -1,19 +1,16 @@
 import { StudentProfile, StudyNote, MistakeItem, StudyPlannerTask, ExamCountdownItem } from '../types';
 
 export const DEFAULT_PROFILE: StudentProfile = {
-  id: 'student-demo-01',
-  name: 'Chinedu Okafor',
-  email: 'chinedu.student@learnlab.ng',
+  id: '',
+  name: 'Scholar',
+  email: '',
   educationLevel: 'senior_secondary',
   grade: 'SS 3',
   country: 'Nigeria',
-  subjects: ['Physics', 'Chemistry', 'Biology', 'General Mathematics', 'English Language', 'Economics'],
-  targetExams: ['WAEC (WASSCE)', 'JAMB / UTME'],
-  examDates: {
-    'WAEC (WASSCE)': '2026-05-12',
-    'JAMB / UTME': '2026-04-20',
-  },
-  studyStreakDays: 5,
+  subjects: [],
+  targetExams: [],
+  examDates: {},
+  studyStreakDays: 0,
   lastActiveDate: new Date().toISOString().split('T')[0],
   isPremium: false,
   onboardingCompleted: true,

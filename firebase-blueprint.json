@@ -1,0 +1,162 @@
+{
+  "entities": {
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "User student profile information, academic level, and preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "educationLevel": { "type": "string", "maxLength": 50 },
+        "grade": { "type": "string", "maxLength": 50 },
+        "country": { "type": "string", "maxLength": 50 },
+        "institution": { "type": "string", "maxLength": 150 },
+        "faculty": { "type": "string", "maxLength": 100 },
+        "course": { "type": "string", "maxLength": 100 },
+        "subjects": { "type": "array" },
+        "targetExams": { "type": "array" },
+        "studyStreakDays": { "type": "number" },
+        "lastActiveDate": { "type": "string", "maxLength": 50 },
+        "isPremium": { "type": "boolean" },
+        "onboardingCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "educationLevel", "grade", "country", "subjects", "targetExams", "onboardingCompleted"]
+    },
+    "StudyNote": {
+      "title": "StudyNote",
+      "description": "Comprehensive study note entity with flashcards, quizzes, and study guide materials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "gradeLevel": { "type": "string", "maxLength": 50 },
+        "educationLevel": { "type": "string", "maxLength": 50 },
+        "topic": { "type": "string", "maxLength": 150 },
+        "rawText": { "type": "string", "maxLength": 50000 },
+        "fileNames": { "type": "array" },
+        "resources": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "subject", "topic", "resources"]
+    },
+    "QuizResult": {
+      "title": "QuizResult",
+      "description": "Detailed log of completed quiz or mock exam attempt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "topic": { "type": "string", "maxLength": 150 },
+        "title": { "type": "string", "maxLength": 200 },
+        "date": { "type": "string", "maxLength": 50 },
+        "totalQuestions": { "type": "number" },
+        "score": { "type": "number" },
+        "percentage": { "type": "number" },
+        "timeSpentSeconds": { "type": "number" },
+        "answers": { "type": "array" },
+        "weakTopics": { "type": "array" },
+        "strongTopics": { "type": "array" },
+        "recommendedNextSteps": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "subject", "topic", "title", "totalQuestions", "score", "percentage"]
+    },
+    "MistakeItem": {
+      "title": "MistakeItem",
+      "description": "Question answered incorrectly saved into the mistake bank",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "questionId": { "type": "string", "maxLength": 128 },
+        "question": { "type": "string", "maxLength": 2000 },
+        "options": { "type": "array" },
+        "correctAnswer": { "type": "string", "maxLength": 1000 },
+        "userWrongAnswer": { "type": "string", "maxLength": 1000 },
+        "explanation": { "type": "string", "maxLength": 3000 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "topic": { "type": "string", "maxLength": 150 },
+        "examName": { "type": "string", "maxLength": 100 },
+        "year": { "type": "string", "maxLength": 30 },
+        "sourceType": { "type": "string", "maxLength": 50 },
+        "addedAt": { "type": "string", "maxLength": 50 },
+        "reviewedCount": { "type": "number" },
+        "resolved": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "questionId", "question", "correctAnswer", "userWrongAnswer", "subject", "topic", "resolved"]
+    },
+    "StudyPlannerTask": {
+      "title": "StudyPlannerTask",
+      "description": "Scheduled study task for student calendar/planner",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "topic": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string", "maxLength": 50 },
+        "dueDate": { "type": "string", "maxLength": 50 },
+        "time": { "type": "string", "maxLength": 20 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "completed": { "type": "boolean" },
+        "priority": { "type": "string", "maxLength": 20 },
+        "estimatedMinutes": { "type": "number" },
+        "isSpacedRepetition": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "subject", "completed"]
+    },
+    "ExamCountdownItem": {
+      "title": "ExamCountdownItem",
+      "description": "Target exam date countdown item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "examName": { "type": "string", "maxLength": 100 },
+        "subject": { "type": "string", "maxLength": 80 },
+        "targetDate": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "examName", "targetDate"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/StudentProfile" },
+      "description": "User student profile information and settings"
+    },
+    "/users/{userId}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/StudyNote" },
+      "description": "User study notes with structured study guides, flashcards, and quizzes"
+    },
+    "/users/{userId}/quizHistory/{quizId}": {
+      "schema": { "$ref": "#/entities/QuizResult" },
+      "description": "User quiz and mock exam results history"
+    },
+    "/users/{userId}/mistakes/{mistakeId}": {
+      "schema": { "$ref": "#/entities/MistakeItem" },
+      "description": "Mistake bank tracker items for active correction"
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/StudyPlannerTask" },
+      "description": "Scheduled study tasks and planner items"
+    },
+    "/users/{userId}/countdowns/{countdownId}": {
+      "schema": { "$ref": "#/entities/ExamCountdownItem" },
+      "description": "Target exam countdown date items"
+    }
+  }
+}

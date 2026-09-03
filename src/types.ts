@@ -54,6 +54,9 @@ export interface QuizQuestion {
   topic: string;
   subject?: string;
   examName?: string;
+  examId?: string;
+  classLevel?: string;
+  educationLevel?: EducationLevel;
   year?: number | string;
   difficulty: 'easy' | 'medium' | 'hard';
   sourceType: QuestionSourceType;
@@ -76,6 +79,10 @@ export interface StudyResource {
   glossary: { term: string; definition: string }[];
   cheatSheet: { category: string; content: string[] }[];
   comparisonTables?: { title: string; headers: string[]; rows: string[][] }[];
+  conceptMap?: { coreTopic: string; branches: { subtopic: string; details: string[] }[] };
+  detectedSubject?: string;
+  detectedTopic?: string;
+  detectedTopics?: string[];
   revisionChecklist: { task: string; completed: boolean }[];
 }
 
@@ -87,6 +94,8 @@ export interface StudyNote {
   gradeLevel: AcademicGrade;
   educationLevel: EducationLevel;
   topic: string;
+  detectedTopics?: string[];
+  sourceFileType?: string;
   rawText: string;
   fileNames?: string[];
   createdAt: string;
@@ -96,6 +105,7 @@ export interface StudyNote {
 
 export interface QuizResult {
   id: string;
+  userId?: string;
   noteId?: string;
   examId?: string;
   subject: string;
@@ -122,6 +132,7 @@ export interface QuizResult {
 
 export interface MistakeItem {
   id: string;
+  userId?: string;
   questionId: string;
   question: string;
   options: string[];
@@ -138,11 +149,17 @@ export interface MistakeItem {
   resolved: boolean;
 }
 
+export type ExamCategory = 'school_exam' | 'standardized_exam';
+
 export interface ExamDefinition {
   id: string;
   name: string;
   shortName: string;
   level: EducationLevel;
+  category?: ExamCategory;
+  classLevel?: string;
+  term?: string;
+  assessmentType?: string;
   description: string;
   subjects: string[];
   years: number[];
@@ -154,6 +171,10 @@ export interface ExamDefinition {
 export interface MockExamConfig {
   examId: string;
   examName: string;
+  category?: ExamCategory;
+  classLevel?: string;
+  term?: string;
+  assessmentType?: string;
   subject: string;
   topics?: string[];
   questionCount: number; // 5, 10, 20, 30, 50, custom
@@ -166,6 +187,7 @@ export interface MockExamConfig {
 
 export interface StudyPlannerTask {
   id: string;
+  userId?: string;
   title: string;
   subject: string;
   topic?: string;
@@ -196,6 +218,7 @@ export interface StudyBuddyDailyLimit {
 
 export interface ExamCountdownItem {
   id: string;
+  userId?: string;
   examName: string;
   subject?: string;
   targetDate: string; // YYYY-MM-DD

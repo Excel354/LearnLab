@@ -1,0 +1,162 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Default-Deny Catch-All Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validation Helpers ---
+
+    function isValidStudentProfile(data, userId) {
+      return data.id is string && data.id == userId
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.email is string && data.email.size() <= 200
+        && data.educationLevel is string && data.educationLevel.size() <= 50
+        && data.grade is string && data.grade.size() <= 50
+        && data.country is string && data.country.size() <= 50
+        && (!('institution' in data) || (data.institution is string && data.institution.size() <= 150))
+        && (!('faculty' in data) || (data.faculty is string && data.faculty.size() <= 100))
+        && (!('course' in data) || (data.course is string && data.course.size() <= 100))
+        && data.subjects is list && data.subjects.size() <= 30
+        && data.targetExams is list && data.targetExams.size() <= 20
+        && (!('studyStreakDays' in data) || data.studyStreakDays is number)
+        && (!('isPremium' in data) || data.isPremium is bool)
+        && data.onboardingCompleted is bool;
+    }
+
+    function isValidStudyNote(data, userId) {
+      return data.id is string && isValidId(data.id)
+        && data.userId is string && data.userId == userId
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.subject is string && data.subject.size() <= 80
+        && data.topic is string && data.topic.size() <= 150
+        && (!('rawText' in data) || (data.rawText is string && data.rawText.size() <= 50000))
+        && data.resources is map;
+    }
+
+    function isValidQuizResult(data, userId) {
+      return data.id is string && isValidId(data.id)
+        && data.userId is string && data.userId == userId
+        && data.subject is string && data.subject.size() <= 80
+        && data.topic is string && data.topic.size() <= 150
+        && data.title is string && data.title.size() <= 200
+        && data.totalQuestions is number && data.totalQuestions >= 0 && data.totalQuestions <= 200
+        && data.score is number && data.score >= 0
+        && data.percentage is number && data.percentage >= 0 && data.percentage <= 100;
+    }
+
+    function isValidMistakeItem(data, userId) {
+      return data.id is string && isValidId(data.id)
+        && data.userId is string && data.userId == userId
+        && data.questionId is string && data.questionId.size() <= 128
+        && data.question is string && data.question.size() > 0 && data.question.size() <= 2000
+        && data.correctAnswer is string && data.correctAnswer.size() <= 1000
+        && data.userWrongAnswer is string && data.userWrongAnswer.size() <= 1000
+        && data.subject is string && data.subject.size() <= 80
+        && data.topic is string && data.topic.size() <= 150
+        && data.resolved is bool;
+    }
+
+    function isValidPlannerTask(data, userId) {
+      return data.id is string && isValidId(data.id)
+        && data.userId is string && data.userId == userId
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.subject is string && data.subject.size() <= 80
+        && (!('topic' in data) || (data.topic is string && data.topic.size() <= 150))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.completed is bool;
+    }
+
+    function isValidCountdownItem(data, userId) {
+      return data.id is string && isValidId(data.id)
+        && data.userId is string && data.userId == userId
+        && data.examName is string && data.examName.size() > 0 && data.examName.size() <= 100
+        && (!('subject' in data) || (data.subject is string && data.subject.size() <= 80))
+        && data.targetDate is string && data.targetDate.size() <= 50;
+    }
+
+    // --- User Profiles & Subcollections ---
+
+    match /users/{userId} {
+      // User Profile
+      allow get: if isOwner(userId);
+      allow list: if false; // No blanket listing of user profiles
+      allow create: if isOwner(userId) && isValidId(userId) && isValidStudentProfile(incoming(), userId);
+      allow update: if isOwner(userId) && isValidId(userId) && isValidStudentProfile(incoming(), userId)
+        && incoming().id == existing().id;
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Study Notes Subcollection
+      match /notes/{noteId} {
+        allow get: if isOwner(userId) && isValidId(noteId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(noteId) && isValidStudyNote(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(noteId) && isValidStudyNote(incoming(), userId)
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(noteId);
+      }
+
+      // Quiz History Subcollection
+      match /quizHistory/{quizId} {
+        allow get: if isOwner(userId) && isValidId(quizId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(quizId) && isValidQuizResult(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(quizId) && isValidQuizResult(incoming(), userId)
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(quizId);
+      }
+
+      // Mistake Bank Subcollection
+      match /mistakes/{mistakeId} {
+        allow get: if isOwner(userId) && isValidId(mistakeId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(mistakeId) && isValidMistakeItem(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(mistakeId) && isValidMistakeItem(incoming(), userId)
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(mistakeId);
+      }
+
+      // Study Planner Tasks Subcollection
+      match /tasks/{taskId} {
+        allow get: if isOwner(userId) && isValidId(taskId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(taskId) && isValidPlannerTask(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(taskId) && isValidPlannerTask(incoming(), userId)
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(taskId);
+      }
+
+      // Exam Countdowns Subcollection
+      match /countdowns/{countdownId} {
+        allow get: if isOwner(userId) && isValidId(countdownId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(countdownId) && isValidCountdownItem(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(countdownId) && isValidCountdownItem(incoming(), userId)
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(countdownId);
+      }
+    }
+  }
+}

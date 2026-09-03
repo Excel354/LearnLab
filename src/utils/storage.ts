@@ -54,13 +54,10 @@ export function saveStoredProfile(profile: StudentProfile): void {
 export function getStoredNotes(): StudyNote[] {
   try {
     const raw = localStorage.getItem(KEYS.NOTES);
-    if (!raw) {
-      localStorage.setItem(KEYS.NOTES, JSON.stringify(INITIAL_STUDY_NOTES));
-      return INITIAL_STUDY_NOTES;
-    }
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
-    return INITIAL_STUDY_NOTES;
+    return [];
   }
 }
 
@@ -93,17 +90,24 @@ export function saveStoredQuizResult(result: QuizResult): void {
   }
 }
 
+export function saveStoredQuizHistory(results: QuizResult[]): void {
+  try {
+    localStorage.setItem(KEYS.QUIZ_RESULTS, JSON.stringify(results));
+  } catch (e) {
+    console.error('Failed to save quiz history', e);
+  }
+}
+
+export const getStoredQuizHistory = getStoredQuizResults;
+
 // Mistake Bank
 export function getStoredMistakes(): MistakeItem[] {
   try {
     const raw = localStorage.getItem(KEYS.MISTAKES);
-    if (!raw) {
-      localStorage.setItem(KEYS.MISTAKES, JSON.stringify(INITIAL_MISTAKES));
-      return INITIAL_MISTAKES;
-    }
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
-    return INITIAL_MISTAKES;
+    return [];
   }
 }
 
@@ -137,10 +141,7 @@ export function addMistakeItem(mistake: Omit<MistakeItem, 'id' | 'addedAt' | 're
 export function getStoredPlannerTasks(): StudyPlannerTask[] {
   try {
     const raw = localStorage.getItem(KEYS.PLANNER);
-    if (!raw) {
-      localStorage.setItem(KEYS.PLANNER, JSON.stringify(INITIAL_PLANNER_TASKS));
-      return INITIAL_PLANNER_TASKS;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       return parsed.map((t: any) => ({
@@ -149,9 +150,9 @@ export function getStoredPlannerTasks(): StudyPlannerTask[] {
         estimatedMinutes: t.estimatedMinutes || 45,
       }));
     }
-    return INITIAL_PLANNER_TASKS;
+    return [];
   } catch {
-    return INITIAL_PLANNER_TASKS;
+    return [];
   }
 }
 
@@ -166,7 +167,6 @@ export function saveStoredPlannerTasks(tasks: StudyPlannerTask[]): void {
 }
 
 export const saveStoredTasks = saveStoredPlannerTasks;
-export const getStoredQuizHistory = getStoredQuizResults;
 
 export function saveStoredStudyBuddyLimit(limit: StudyBuddyDailyLimit): void {
   try {
@@ -182,13 +182,10 @@ export const getStoredStudyBuddyLimit = getStudyBuddyDailyLimit;
 export function getStoredCountdowns(): ExamCountdownItem[] {
   try {
     const raw = localStorage.getItem(KEYS.COUNTDOWNS);
-    if (!raw) {
-      localStorage.setItem(KEYS.COUNTDOWNS, JSON.stringify(INITIAL_EXAM_COUNTDOWNS));
-      return INITIAL_EXAM_COUNTDOWNS;
-    }
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
-    return INITIAL_EXAM_COUNTDOWNS;
+    return [];
   }
 }
 
@@ -241,16 +238,7 @@ export function incrementStudyBuddyUsage(): StudyBuddyDailyLimit {
 export function getStoredStudyBuddyMessages(): StudyBuddyMessage[] {
   try {
     const raw = localStorage.getItem(KEYS.STUDYBUDDY_MESSAGES);
-    if (!raw) {
-      const welcome: StudyBuddyMessage = {
-        id: 'msg-welcome-01',
-        sender: 'assistant',
-        text: "Hello! I'm your StudyBuddy AI tutor. I'm here to help you understand school and university concepts, explain homework or past questions, break down difficult topics, or clarify notes. How can I help you excel today?",
-        timestamp: new Date().toISOString(),
-      };
-      localStorage.setItem(KEYS.STUDYBUDDY_MESSAGES, JSON.stringify([welcome]));
-      return [welcome];
-    }
+    if (!raw) return [];
     return JSON.parse(raw);
   } catch {
     return [];
@@ -265,6 +253,24 @@ export function saveStoredStudyBuddyMessages(msgs: StudyBuddyMessage[]): void {
   }
 }
 
+/**
+ * Clear all user learning data from local cache
+ * Triggered on "Erase All My Data"
+ */
+export function clearAllStoredUserData(): void {
+  try {
+    localStorage.removeItem(KEYS.NOTES);
+    localStorage.removeItem(KEYS.QUIZ_RESULTS);
+    localStorage.removeItem(KEYS.MISTAKES);
+    localStorage.removeItem(KEYS.PLANNER);
+    localStorage.removeItem(KEYS.COUNTDOWNS);
+    localStorage.removeItem(KEYS.STUDYBUDDY_MESSAGES);
+    localStorage.removeItem(KEYS.STUDYBUDDY_LIMIT);
+  } catch (e) {
+    console.error('Failed to clear stored user data', e);
+  }
+}
+
 // Exam Readiness Calculator
 export function calculateExamReadiness(
   customNotes?: StudyNote[],
@@ -275,42 +281,67 @@ export function calculateExamReadiness(
   const mistakes = customMistakes || getStoredMistakes();
   const notes = customNotes || getStoredNotes();
 
-  const baseSubjectMastery: Record<string, number> = {
-    Mathematics: 82,
-    English: 88,
-    Biology: 76,
-    Chemistry: 71,
-    Physics: 68,
-  };
+  // If new user with no attempts and no notes
+  if (quizResults.length === 0 && notes.length === 0 && mistakes.length === 0) {
+    return {
+      overallPercentage: 0,
+      explanation: 'No study or practice activity recorded yet. Upload study notes or attempt exam drills to calculate your personalized readiness score.',
+      strongTopics: [],
+      weakTopics: [],
+      recommendedAction: 'Start by uploading lecture notes or attempting a practice drill.',
+      breakdown: {
+        practiceAccuracy: 0,
+        mockExamScore: 0,
+        topicCoverage: 0,
+        mistakeClearance: 0,
+      },
+      subjectMastery: {},
+    };
+  }
 
-  // If quiz results exist, refine subject mastery
+  const subjectMastery: Record<string, number> = {};
+
+  // If quiz results exist, compute actual subject mastery
   if (quizResults.length > 0) {
+    const subjectTotals: Record<string, { sum: number; count: number }> = {};
     quizResults.forEach((q) => {
       if (q.subject) {
-        if (!baseSubjectMastery[q.subject]) {
-          baseSubjectMastery[q.subject] = q.percentage;
+        if (!subjectTotals[q.subject]) {
+          subjectTotals[q.subject] = { sum: q.percentage, count: 1 };
         } else {
-          baseSubjectMastery[q.subject] = Math.round((baseSubjectMastery[q.subject] + q.percentage) / 2);
+          subjectTotals[q.subject].sum += q.percentage;
+          subjectTotals[q.subject].count += 1;
         }
+      }
+    });
+    Object.keys(subjectTotals).forEach((sub) => {
+      subjectMastery[sub] = Math.round(subjectTotals[sub].sum / subjectTotals[sub].count);
+    });
+  } else if (notes.length > 0) {
+    // If only notes uploaded, indicate active syllabus study for those subjects
+    notes.forEach((n) => {
+      if (n.subject && !subjectMastery[n.subject]) {
+        subjectMastery[n.subject] = 50; // In-progress reading
       }
     });
   }
 
-  // If new user with no attempts yet
+  // If no quiz attempts completed yet
   if (quizResults.length === 0) {
+    const topicCoverage = Math.min(100, notes.length * 20);
     return {
-      overallPercentage: 74,
-      explanation: 'Based on your pre-loaded curriculum diagnostic and note reviews. Complete more practice sets to increase measurement precision.',
-      strongTopics: ['Plant Physiology', 'Quadratic Equations'],
-      weakTopics: ['Current Electricity', 'Acids, Bases & Salts', 'Grammatical Concord'],
-      recommendedAction: 'Solve a 10-question practice set on Current Electricity to strengthen weak concepts.',
+      overallPercentage: Math.round(topicCoverage * 0.3),
+      explanation: 'Notes uploaded. Complete practice questions or CBT mock sessions to measure your exam readiness accuracy.',
+      strongTopics: notes.map((n) => n.topic).slice(0, 3),
+      weakTopics: [],
+      recommendedAction: 'Complete a practice quiz on your uploaded notes to establish your baseline score.',
       breakdown: {
-        practiceAccuracy: 78,
-        mockExamScore: 70,
-        topicCoverage: 65,
-        mistakeClearance: 60,
+        practiceAccuracy: 0,
+        mockExamScore: 0,
+        topicCoverage,
+        mistakeClearance: 100,
       },
-      subjectMastery: baseSubjectMastery,
+      subjectMastery,
     };
   }
 
@@ -318,13 +349,13 @@ export function calculateExamReadiness(
   const totalScore = quizResults.reduce((acc, r) => acc + r.percentage, 0);
   const avgAccuracy = Math.round(totalScore / quizResults.length);
   const unresolvedMistakes = mistakes.filter((m) => !m.resolved).length;
-  const mistakeClearance = Math.max(20, Math.min(100, Math.round(100 - unresolvedMistakes * 8)));
-  const topicCoverage = Math.min(100, Math.round((notes.length * 20 + quizResults.length * 15)));
+  const mistakeClearance = Math.max(0, Math.min(100, Math.round(100 - unresolvedMistakes * 10)));
+  const topicCoverage = Math.min(100, Math.round((notes.length * 20 + quizResults.length * 10)));
 
   const overall = Math.round(avgAccuracy * 0.5 + mistakeClearance * 0.25 + topicCoverage * 0.25);
-  const clampedOverall = Math.max(15, Math.min(98, overall));
+  const clampedOverall = Math.max(0, Math.min(100, overall));
 
-  // Extract weak topics
+  // Extract real weak and strong topics
   const allWeakTopics: string[] = [];
   const allStrongTopics: string[] = [];
   quizResults.forEach((r) => {
@@ -347,21 +378,23 @@ export function calculateExamReadiness(
     explanation = `Developing foundational mastery. Focusing on your Mistake Bank and targeted 5-10 question practice sets will rapidly boost your score.`;
   }
 
-  const topWeak = uniqueWeak[0] || 'your unresolved mistakes';
-  const recommendedAction = `Practice 10 targeted questions on ${topWeak} to close knowledge gaps.`;
+  const topWeak = uniqueWeak[0];
+  const recommendedAction = topWeak
+    ? `Practice targeted questions on ${topWeak} to close knowledge gaps.`
+    : `Attempt a diagnostic past question set to identify improvement areas.`;
 
   return {
     overallPercentage: clampedOverall,
     explanation,
-    strongTopics: uniqueStrong.length > 0 ? uniqueStrong : ['Basic Science', 'Plant Nutrition'],
-    weakTopics: uniqueWeak.length > 0 ? uniqueWeak : ['Current Electricity', 'Organic Chemistry'],
+    strongTopics: uniqueStrong,
+    weakTopics: uniqueWeak,
     recommendedAction,
     breakdown: {
       practiceAccuracy: avgAccuracy,
-      mockExamScore: Math.min(100, avgAccuracy - 4),
+      mockExamScore: Math.max(0, avgAccuracy - 4),
       topicCoverage,
       mistakeClearance,
     },
-    subjectMastery: baseSubjectMastery,
+    subjectMastery,
   };
 }

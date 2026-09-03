@@ -53,14 +53,15 @@ export const StudyMode: React.FC<StudyModeProps> = ({
   );
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [activeResourceTab, setActiveResourceTab] = useState<
-    'summary' | 'flashcards' | 'quiz' | 'guide' | 'cheatsheet' | 'glossary'
+    'summary' | 'flashcards' | 'quiz' | 'guide' | 'checklist' | 'cheatsheet' | 'glossary'
   >('summary');
 
-  // New Note Form State
+  // New Note Form State (File-First: Subject, Topic & Grade are optional metadata)
   const [newTitle, setNewTitle] = useState('');
-  const [newSubject, setNewSubject] = useState(profile.subjects[0] || 'Biology');
+  const [newSubject, setNewSubject] = useState('');
   const [newTopic, setNewTopic] = useState('');
-  const [newGradeLevel, setNewGradeLevel] = useState(profile.grade || 'SS 3');
+  const [newGradeLevel, setNewGradeLevel] = useState('');
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [pastedText, setPastedText] = useState('');
   const [selectedFile, setSelectedFile] = useState<{
     name: string;
@@ -124,16 +125,24 @@ export const StudyMode: React.FC<StudyModeProps> = ({
       }
     };
     reader.readAsDataURL(file);
+
+    // If it's a plain text file, also preview it into pastedText if empty
+    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+      const textReader = new FileReader();
+      textReader.onload = () => {
+        if (typeof textReader.result === 'string' && !pastedText) {
+          setPastedText(textReader.result);
+        }
+      };
+      textReader.readAsText(file);
+    }
   };
 
-  // Submit Note for AI Processing
+  // Submit Note for AI Processing (File-First Architecture)
   const handleProcessNote = async () => {
-    if (!newSubject.trim() || !newTopic.trim()) {
-      setErrorMessage('Please specify both the Subject and Topic for your notes.');
-      return;
-    }
+    // Subject, Class, and Topic are strictly OPTIONAL. Uploaded file or pasted text is the primary requirement.
     if (!pastedText.trim() && !selectedFile) {
-      setErrorMessage('Please paste your study text or upload a document/image.');
+      setErrorMessage('Please upload a study document, image, or paste note text to summarize.');
       return;
     }
 
@@ -142,15 +151,16 @@ export const StudyMode: React.FC<StudyModeProps> = ({
 
     try {
       const payload: any = {
-        text: pastedText,
-        subject: newSubject,
-        gradeLevel: newGradeLevel,
-        topic: newTopic,
+        text: pastedText.trim(),
+        subject: newSubject.trim() || undefined,
+        gradeLevel: newGradeLevel.trim() || profile.grade || undefined,
+        topic: newTopic.trim() || undefined,
       };
 
       if (selectedFile) {
         payload.fileData = selectedFile.base64;
         payload.mimeType = selectedFile.type;
+        payload.fileName = selectedFile.name;
       }
 
       const response = await fetch('/api/ai/process-notes', {
@@ -162,17 +172,24 @@ export const StudyMode: React.FC<StudyModeProps> = ({
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to process note materials.');
+        throw new Error(data.error || 'Failed to process study materials.');
       }
+
+      // Extract subject, topic, and title from AI detection if not manually provided
+      const finalSubject = newSubject.trim() || data.detectedSubject || data.resources?.detectedSubject || profile.subjects[0] || 'General';
+      const finalTopic = newTopic.trim() || data.detectedTopic || data.resources?.detectedTopic || 'Study Topic';
+      const finalTitle = newTitle.trim() || data.resources?.summary?.title || (selectedFile ? selectedFile.name.replace(/\.[^/.]+$/, '') : `${finalSubject}: ${finalTopic}`);
 
       const newNote: StudyNote = {
         id: `note-${Date.now()}`,
         userId: profile.id,
-        title: newTitle.trim() || `${newSubject}: ${newTopic}`,
-        subject: newSubject,
-        gradeLevel: newGradeLevel,
+        title: finalTitle,
+        subject: finalSubject,
+        gradeLevel: (newGradeLevel.trim() as any) || profile.grade,
         educationLevel: profile.educationLevel,
-        topic: newTopic,
+        topic: finalTopic,
+        detectedTopics: data.detectedTopics || data.resources?.detectedTopics,
+        sourceFileType: selectedFile ? (selectedFile.name.split('.').pop()?.toUpperCase() || 'FILE') : 'TEXT',
         rawText: pastedText || `Processed from file: ${selectedFile?.name}`,
         fileNames: selectedFile ? [selectedFile.name] : undefined,
         createdAt: new Date().toISOString(),
@@ -187,7 +204,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
       resetNewForm();
     } catch (err: any) {
       console.error('Error in handleProcessNote:', err);
-      setErrorMessage(err.message || 'We could not process this document. Please try a clearer copy or paste the text directly.');
+      setErrorMessage(err.message || 'We could not process this document. Please ensure the file contains legible text or photos, or paste your notes directly.');
     } finally {
       setIsProcessing(false);
     }
@@ -195,7 +212,10 @@ export const StudyMode: React.FC<StudyModeProps> = ({
 
   const resetNewForm = () => {
     setNewTitle('');
+    setNewSubject('');
     setNewTopic('');
+    setNewGradeLevel('');
+    setShowOptionalFields(false);
     setPastedText('');
     setSelectedFile(null);
     setErrorMessage(null);
@@ -411,16 +431,21 @@ export const StudyMode: React.FC<StudyModeProps> = ({
         </button>
       </div>
 
-      {/* NEW NOTE CREATION & OCR UPLOAD MODAL/PANEL */}
+      {/* NEW NOTE CREATION & OCR UPLOAD MODAL/PANEL (FILE-FIRST ARCHITECTURE) */}
       {isCreatingNew && (
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-indigo-200 shadow-xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
           <div className="border-b border-slate-100 pb-4">
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-indigo-600" />
-              <span>AI School Note Processing Pipeline</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Upload PDF, handwritten scans, Word docs, photos, or paste raw lecture notes. LearnLab will extract and build interconnected summaries, flashcards, and quizzes.
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+                <span>File-First Note Summarizer & Study Generator</span>
+              </h2>
+              <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold">
+                Document-Driven AI
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Upload your actual notes, PDF slides, Word documents, textbook scans, or photos. LearnLab analyzes the real document contents to generate precise summaries, flashcards, quizzes, and study guides.
             </p>
           </div>
 
@@ -434,144 +459,205 @@ export const StudyMode: React.FC<StudyModeProps> = ({
             </div>
           )}
 
-          {/* Explicit Inputs Section (Mandated in Section 8) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Subject *
-              </label>
-              <select
-                id="new-note-subject-select"
-                value={newSubject}
-                onChange={(e) => setNewSubject(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-hidden"
-              >
-                {(SUBJECTS_BY_LEVEL[profile.educationLevel] || []).map((sub) => (
-                  <option key={sub} value={sub}>
-                    {sub}
-                  </option>
-                ))}
-              </select>
+          {/* PRIMARY STEP: Upload Material or Paste Notes (Central Source of Truth) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <UploadCloud className="w-4 h-4 text-indigo-600" />
+                Step 1: Upload Study Material (Primary Source)
+              </span>
+              <span className="text-[11px] text-slate-400 font-medium">
+                Supports PDF, DOCX, Images, Scans & Text
+              </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Class / Grade Level *
-              </label>
-              <input
-                id="new-note-grade-input"
-                type="text"
-                value={newGradeLevel}
-                onChange={(e) => setNewGradeLevel(e.target.value)}
-                placeholder="e.g. SS 3, JSS 2, 100L"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 outline-hidden"
-              />
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* File Drag & Drop / Selection */}
+              <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all flex flex-col items-center justify-center relative ${
+                selectedFile
+                  ? 'border-emerald-400 bg-emerald-50/30'
+                  : 'border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/20'
+              }`}>
+                <input
+                  id="note-file-upload-input"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt"
+                  onChange={handleFileUpload}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                />
+                <UploadCloud className={`w-10 h-10 mb-2 ${selectedFile ? 'text-emerald-600' : 'text-indigo-500'}`} />
+                <p className="text-xs font-bold text-slate-800">
+                  {selectedFile ? selectedFile.name : 'Upload PDF, Word doc (.docx), Photo or Handwritten Notes'}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Supports OCR for handwritten student notes & lecture camera captures (up to 25MB).
+                </p>
+                {selectedFile ? (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      ✓ Ready: {selectedFile.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFile(null);
+                      }}
+                      className="text-[10px] text-rose-600 hover:underline font-semibold"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <span className="mt-2.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-semibold">
+                    Browse or drag file here
+                  </span>
+                )}
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Specific Topic *
-              </label>
-              <input
-                id="new-note-topic-input"
-                type="text"
-                value={newTopic}
-                onChange={(e) => setNewTopic(e.target.value)}
-                placeholder="e.g. Current Electricity & Ohm's Law"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 outline-hidden"
-              />
+              {/* Paste Plain Text Area */}
+              <div className="flex flex-col">
+                <textarea
+                  id="note-paste-text-input"
+                  rows={5}
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder="Or paste text directly from lecture slides, syllabus, or typed school notes here..."
+                  className="w-full h-full p-3.5 rounded-2xl border border-slate-300 text-xs font-medium text-slate-800 outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 resize-none"
+                ></textarea>
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Note Title (Optional)
-            </label>
-            <input
-              id="new-note-title-input"
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="e.g. Chapter 4: Electric Circuits and Resistance"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 outline-hidden"
-            />
-          </div>
+          {/* SECONDARY / OPTIONAL STEP: Optional information (Class, Subject, Topic) */}
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              id="toggle-optional-fields-btn"
+              onClick={() => setShowOptionalFields(!showOptionalFields)}
+              className="flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-indigo-600 transition-colors"
+            >
+              <span>{showOptionalFields ? '▼ Hide optional information' : '▶ Add optional information (Class, Subject, Topic)'}</span>
+              <span className="text-[11px] font-normal text-slate-400">
+                — AI automatically detects these if left blank
+              </span>
+            </button>
 
-          {/* File Upload / OCR Area */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* File Drag & Drop / Selection */}
-            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-blue-500 hover:bg-blue-50/30 transition-all flex flex-col items-center justify-center relative">
-              <input
-                id="note-file-upload-input"
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt"
-                onChange={handleFileUpload}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              />
-              <UploadCloud className="w-10 h-10 text-blue-500 mb-2" />
-              <p className="text-xs font-bold text-slate-800">
-                {selectedFile ? selectedFile.name : 'Upload PDF, Image, Word doc or Handwritten Notes'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Supports OCR for handwritten student notes & lecture camera captures (up to 25MB).
-              </p>
-              {selectedFile && (
-                <span className="mt-2 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                  ✓ File ready for processing
-                </span>
-              )}
-            </div>
+            {showOptionalFields && (
+              <div className="mt-3 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-4 animate-in fade-in duration-150">
+                <p className="text-[11px] text-slate-500 font-medium">
+                  <strong>Optional Context:</strong> If you choose to provide your Class, Subject, and Topic, LearnLab uses that information as additional context to calibrate depth, not as the primary source.
+                </p>
 
-            {/* Paste Plain Text Area */}
-            <div>
-              <textarea
-                id="note-paste-text-input"
-                rows={5}
-                value={pastedText}
-                onChange={(e) => setPastedText(e.target.value)}
-                placeholder="Or paste text directly from lecture slides, syllabus, or typed school notes here..."
-                className="w-full p-3.5 rounded-2xl border border-slate-300 text-xs font-medium text-slate-800 outline-hidden focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none"
-              ></textarea>
-            </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Subject (Optional)
+                    </label>
+                    <select
+                      id="new-note-subject-select"
+                      value={newSubject}
+                      onChange={(e) => setNewSubject(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 focus:border-indigo-500 outline-hidden"
+                    >
+                      <option value="">Auto-detect from file</option>
+                      {(SUBJECTS_BY_LEVEL[profile.educationLevel] || []).map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Class / Grade (Optional)
+                    </label>
+                    <input
+                      id="new-note-grade-input"
+                      type="text"
+                      value={newGradeLevel}
+                      onChange={(e) => setNewGradeLevel(e.target.value)}
+                      placeholder={`e.g. ${profile.grade || 'SS 3'}`}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 outline-hidden focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                      Specific Topic (Optional)
+                    </label>
+                    <input
+                      id="new-note-topic-input"
+                      type="text"
+                      value={newTopic}
+                      onChange={(e) => setNewTopic(e.target.value)}
+                      placeholder="Auto-detect from file"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 outline-hidden focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+                    Note Title (Optional)
+                  </label>
+                  <input
+                    id="new-note-title-input"
+                    type="text"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="Defaults to document name or detected title"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-800 outline-hidden focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Processing CTA */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              id="cancel-new-note-btn"
-              type="button"
-              onClick={() => {
-                setIsCreatingNew(false);
-                resetNewForm();
-              }}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50"
-            >
-              Cancel
-            </button>
+          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <p className="text-[11px] text-slate-400 hidden sm:block">
+              LearnLab generates summary, flashcards, quizzes & study guides strictly from your uploaded material.
+            </p>
 
-            <button
-              id="submit-process-notes-btn"
-              type="button"
-              disabled={isProcessing}
-              onClick={handleProcessNote}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md ${
-                isProcessing
-                  ? 'bg-blue-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
-              }`}
-            >
-              {isProcessing ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Extracting & Generating Resources...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  <span>Process Notes with AI</span>
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                id="cancel-new-note-btn"
+                type="button"
+                onClick={() => {
+                  setIsCreatingNew(false);
+                  resetNewForm();
+                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                id="submit-process-notes-btn"
+                type="button"
+                disabled={isProcessing}
+                onClick={handleProcessNote}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md ${
+                  isProcessing
+                    ? 'bg-indigo-400 cursor-not-allowed'
+                    : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/25 active:scale-98'
+                }`}
+              >
+                {isProcessing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Analyzing File & Generating Resources...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>✨ Summarize My Notes</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -659,17 +745,33 @@ export const StudyMode: React.FC<StudyModeProps> = ({
               <div className="p-6 bg-slate-50/70 border-b border-slate-100 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="px-2.5 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wider">
                         {currentNote.subject}
                       </span>
                       <span className="text-xs font-semibold text-slate-600">
                         {currentNote.gradeLevel} • {currentNote.topic}
                       </span>
+                      {currentNote.fileNames && currentNote.fileNames.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 text-[10px] font-medium flex items-center gap-1">
+                          <FileText className="w-3 h-3 text-slate-500" />
+                          <span>File: {currentNote.fileNames[0]}</span>
+                        </span>
+                      )}
                     </div>
                     <h2 className="text-xl font-bold text-slate-900 mt-1">
                       {currentNote.title}
                     </h2>
+                    {currentNote.detectedTopics && currentNote.detectedTopics.length > 1 && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Analyzed Sections:</span>
+                        {currentNote.detectedTopics.map((dt, idx) => (
+                          <span key={idx} className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-semibold">
+                            {dt}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -757,6 +859,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                     { id: 'flashcards', label: `Flashcards (${currentNote.resources.flashcards.length})` },
                     { id: 'quiz', label: `Quiz (${currentNote.resources.quizzes.length})` },
                     { id: 'guide', label: 'Study Guide' },
+                    { id: 'checklist', label: `Checklist (${currentNote.resources.revisionChecklist?.length || 0})` },
                     { id: 'cheatsheet', label: 'Cheat Sheet' },
                     { id: 'glossary', label: 'Glossary' },
                   ].map((tab) => {
@@ -1257,7 +1360,67 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                   </div>
                 )}
 
-                {/* 5. CHEAT SHEET */}
+                {/* 5. REVISION CHECKLIST */}
+                {activeResourceTab === 'checklist' && (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-100 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                          Revision Mastery Checklist
+                        </h4>
+                        <p className="text-[11px] text-indigo-700 mt-0.5">
+                          Concrete milestones extracted directly from your uploaded material.
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold text-indigo-700">
+                        {currentNote.resources.revisionChecklist?.filter((c) => c.completed).length || 0} / {currentNote.resources.revisionChecklist?.length || 0} Completed
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {currentNote.resources.revisionChecklist?.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            const updatedNotes = notes.map((n) => {
+                              if (n.id === currentNote.id) {
+                                const newChecklist = [...(n.resources.revisionChecklist || [])];
+                                newChecklist[idx] = {
+                                  ...newChecklist[idx],
+                                  completed: !newChecklist[idx].completed,
+                                };
+                                return {
+                                  ...n,
+                                  resources: { ...n.resources, revisionChecklist: newChecklist },
+                                };
+                              }
+                              return n;
+                            });
+                            onSaveNotes(updatedNotes);
+                          }}
+                          className={`p-3.5 rounded-2xl border text-xs font-medium flex items-center gap-3 cursor-pointer transition-all ${
+                            item.completed
+                              ? 'bg-emerald-50/60 border-emerald-200 text-emerald-900 line-through'
+                              : 'bg-white border-slate-200 hover:border-indigo-300 text-slate-800'
+                          }`}
+                        >
+                          <div
+                            className={`w-5 h-5 rounded-lg flex items-center justify-center border transition-all ${
+                              item.completed
+                                ? 'bg-emerald-600 border-emerald-600 text-white'
+                                : 'border-slate-300 bg-slate-50'
+                            }`}
+                          >
+                            {item.completed && <Check className="w-3.5 h-3.5" />}
+                          </div>
+                          <span className="flex-1">{item.task}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. CHEAT SHEET */}
                 {activeResourceTab === 'cheatsheet' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-150">
                     {currentNote.resources.cheatSheet?.map((cs, idx) => (

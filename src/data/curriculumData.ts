@@ -1,4 +1,146 @@
-import { ExamDefinition, QuizQuestion } from '../types';
+import { ExamDefinition, QuizQuestion, EducationLevel } from '../types';
+
+export const CLASSES_BY_LEVEL: Record<EducationLevel, string[]> = {
+  primary: ['Primary 1', 'Primary 2', 'Primary 3', 'Primary 4', 'Primary 5', 'Primary 6'],
+  junior_secondary: ['JSS 1', 'JSS 2', 'JSS 3'],
+  senior_secondary: ['SS 1', 'SS 2', 'SS 3'],
+  university: [
+    '100 Level (Year 1)',
+    '200 Level (Year 2)',
+    '300 Level (Year 3)',
+    '400 Level (Year 4)',
+    '500 Level (Year 5)',
+    'Postgraduate',
+  ],
+};
+
+export const SCHOOL_TERMS = [
+  'First Term',
+  'Second Term',
+  'Third Term',
+  'Full Session (All Terms)',
+];
+
+export const SCHOOL_ASSESSMENT_TYPES = [
+  'School Examination (End of Term)',
+  'Continuous Assessment (CA)',
+  'Class Test',
+  'Revision Test',
+  'Custom School Exam',
+];
+
+export const CURRICULUM_TOPICS_BY_LEVEL: Record<string, Record<string, string[]>> = {
+  // Primary school key subjects
+  'Primary 1': {
+    'Mathematics': ['Counting Numbers 1-100', 'Addition & Subtraction', 'Shapes & Sizes', 'Comparing Quantities', 'Money & Shopping'],
+    'English Language': ['Alphabet Sounds & Phonics', 'Sight Words', 'Simple Sentences', 'Nouns (Naming Words)', 'Action Words (Verbs)'],
+    'Basic Science': ['Living & Non-living Things', 'The Human Body', 'Water & Its Uses', 'Cleanliness & Hygiene', 'Plants Around Us'],
+  },
+  'Primary 2': {
+    'Mathematics': ['Place Value (Tens & Units)', 'Multiplication Basics', 'Fractions (Halves & Quarters)', 'Measurement of Length', 'Telling Time (O’clock & Half-past)'],
+    'English Language': ['Reading Comprehension', 'Pronouns', 'Plural of Nouns', 'Adjectives (Describing Words)', 'Capital Letters & Full Stops'],
+    'Basic Science': ['Animals & Their Young', 'Soil & Rocks', 'Sun, Moon & Stars', 'Good Health Habits', 'Float & Sink Objects'],
+  },
+  'Primary 3': {
+    'Mathematics': ['Addition with Renaming', 'Multiplication Tables 2-9', 'Simple Division', 'Money (Naira & Kobo)', '2D & 3D Shapes'],
+    'English Language': ['Sentence Building', 'Past & Present Tenses', 'Prepositions (in, on, under)', 'Question Words', 'Short Composition'],
+    'Basic Science': ['Sources & Uses of Energy', 'Food & Nutrition', 'Weather & Seasons', 'Simple Machines', 'Pollution & Keeping Clean'],
+  },
+  'Primary 4': {
+    'Mathematics': ['Place Value up to 10,000', 'Fractions & Decimals', 'Long Division & Multiplication', 'Perimeter & Area', 'Weights & Measures', 'Word Problems'],
+    'English Language': ['Reading Comprehension & Vocabulary', 'Regular & Irregular Verbs', 'Adverbs of Manner', 'Conjunctions (and, but, because)', 'Formal & Informal Letters'],
+    'Basic Science': ['Water Cycle', 'Digestive System in Humans', 'Habitats of Living Organisms', 'Electricity & Circuits', 'Forces & Motion'],
+    'Social Studies': ['Our Cultural Diversity', 'Family Structures', 'Civic Responsibilities', 'Community Leaders', 'Road Safety Rules'],
+  },
+  'Primary 5': {
+    'Mathematics': ['Percentages & Ratios', 'Decimals & Approximations', 'Volume of Cuboids', 'Prime Numbers & Factors', 'Angles & Triangles', 'Average & Speed'],
+    'English Language': ['Advanced Comprehension', 'Direct & Indirect Speech', 'Idioms & Proverbs', 'Prefixes & Suffixes', 'Creative Essay Writing'],
+    'Basic Science': ['Skeletal System & Bones', 'Reproduction in Plants', 'Magnetism & Magnetic Fields', 'Ecosystems & Food Chains', 'Environmental Sanitation'],
+    'Quantitative Aptitude': ['Number Patterns & Series', 'Mathematical Operators', 'Grid Logic', 'Ratio Sequences', 'Shape Algebra'],
+    'Verbal Aptitude': ['Synonyms & Antonyms', 'Analogies', 'Word Codes & Decoding', 'Odd Word Out', 'Alphabetical Ordering'],
+  },
+  'Primary 6': {
+    'Mathematics': ['Fractions, Decimals & Percentages', 'Simple Interest & Profit/Loss', 'Algebraic Expressions & Equations', 'Circle Geometry (Radius & Diameter)', 'Statistics (Bar Charts & Mean)'],
+    'English Language': ['Essay Writing (Narrative & Argumentative)', 'Active & Passive Voice', 'Subject-Verb Agreement', 'Complex Sentences', 'Summary Writing'],
+    'Basic Science': ['Respiratory & Circulatory Systems', 'Energy Conversion & Conservation', 'Chemical Changes vs Physical Changes', 'Space Science & Gravity', 'First Aid & Safety'],
+    'Quantitative Aptitude': ['Composite Logic Problems', 'Unknown Variable Grids', 'Fraction Patterns', 'Geometric Logic', 'Advanced Sequences'],
+    'Verbal Aptitude': ['Complex Analogies', 'Sentence Completion', 'Vocabulary in Context', 'Logical Deductions', 'Spelling Mastery'],
+  },
+
+  // Junior Secondary
+  'JSS 1': {
+    'Mathematics': ['Whole Numbers & Place Value', 'Fractions, Decimals & Percentages', 'Basic Algebra (Variables & Expressions)', 'Simple Equations', 'Plane Geometry & Angles'],
+    'English Studies': ['Grammar: Nouns, Pronouns, Verbs', 'Reading Comprehension', 'Narrative Essay Writing', 'Vowel & Consonant Sounds', 'Punctuation Marks'],
+    'Basic Science': ['Living & Non-Living Things', 'Family Health & Nutrition', 'Matter: States and Properties', 'Forces, Work & Energy', 'The Earth & Solar System'],
+    'Basic Technology': ['Understanding Technology & Materials', 'Woodwork & Metalwork Hand Tools', 'Safety Guidelines in Workshop', 'Freehand Technical Sketching'],
+    'Business Studies': ['Introduction to Commerce', 'Departments in an Office', 'Honesty & Integrity in Business', 'Bookkeeping Basics', 'Keyboarding Skills'],
+  },
+  'JSS 2': {
+    'Mathematics': ['Algebraic Simplification', 'Linear Equations in One Variable', 'Approximation & Significant Figures', 'Pythagoras Theorem', 'Area and Perimeter of Polygons'],
+    'English Studies': ['Transitive & Intransitive Verbs', 'Argumentative Essays', 'Adverbial Clauses', 'Oral English: Intonation & Stress', 'Summary Writing'],
+    'Basic Science': ['Skeletal System & Locomotion', 'Circulatory & Respiratory Systems', 'Chemicals & Substances in Daily Use', 'Kinetic Theory of Matter', 'Thermal Energy & Heat Transfer'],
+    'Basic Technology': ['Geometric Construction', 'Friction & Lubrication', 'Building Construction Basics', 'Electrical Components & Circuits'],
+    'Business Studies': ['Consumer Rights & Protection', 'Ledger Accounts & Cash Book', 'Office Equipment & Filing', 'Petty Cash & Imprest'],
+  },
+  'JSS 3': {
+    'Mathematics': ['Simultaneous Linear Equations', 'Quadratic Equations (Factorization)', 'Trigonometric Ratios (Sin, Cos, Tan)', 'Circle Geometry & Theorems', 'Probability & Statistics'],
+    'English Studies': ['Direct & Indirect Speech', 'Formal Letter Writing & Articles', 'Phrasal Verbs & Prepositions', 'Comprehension & Inference', 'Figures of Speech'],
+    'Basic Science': ['Genetics & Heredity Basics', 'Atomic Structure & Chemical Bonding', 'Acids, Bases and Salts', 'Magnetism & Electromagnetic Induction', 'Space Travel & Satellites'],
+    'Basic Technology': ['Soldering & Electrical Wiring', 'Pointers & Flowcharts', 'Maintenance of Machines', 'Technical Drawing (Orthographic Projections)'],
+    'Business Studies': ['Trial Balance & Final Accounts', 'Banking Services & Transactions', 'Advertising & Sales Promotion', 'Business Ethics & Corruption'],
+  },
+
+  // Senior Secondary
+  'SS 1': {
+    'General Mathematics': ['Number Bases & Conversions', 'Modular Arithmetic', 'Indices and Logarithms', 'Sets & Venn Diagrams', 'Quadratic Equations & Factorization', 'Geometry of Triangles & Polygons'],
+    'English Language': ['Vocabulary Associated with Health & Science', 'Lexis & Structure (Concord)', 'Modal Auxiliaries', 'Expository Essay Writing', 'Comprehension Mastery'],
+    'Biology': ['Classification of Living Things', 'Cell Structure & Functions', 'Nutrition in Animals and Plants', 'Transport System in Organisms', 'Ecology: Biomes & Ecosystems'],
+    'Chemistry': ['Particulate Nature of Matter', 'Atomic Structure & Electronic Configuration', 'Periodic Table & Periodicity', 'Chemical Bonding (Ionic, Covalent, Metallic)', 'Stoichiometry & Mole Concept'],
+    'Physics': ['Units, Dimensions & Measurement', 'Motion: Velocity, Acceleration & Graphs', 'Scalars & Vectors', 'Force, Momentum & Newton’s Laws', 'Work, Energy & Power'],
+    'Economics': ['Meaning of Economics & Basic Concepts', 'Theory of Demand & Supply', 'Elasticity of Demand & Supply', 'Factors of Production', 'Division of Labour & Specialization'],
+  },
+  'SS 2': {
+    'General Mathematics': ['Quadratic Equations by Formula & Graph', 'Simultaneous Linear & Quadratic Equations', 'Arithmetic & Geometric Progressions (AP & GP)', 'Trigonometry & Bearings', 'Statistics (Mean, Median, Standard Deviation)', 'Probability Theorems'],
+    'English Language': ['Articles & Punctuation in Complex Sentences', 'Argumentative & Debate Writing', 'Idiomatic Expressions & Phrasal Verbs', 'Summary Writing Techniques', 'Oral English: Vowel Contrasts & Consonant Clusters'],
+    'Biology': ['Digestive System & Enzymes', 'Transport System & Blood Circulation', 'Respiratory System & Gas Exchange', 'Excretory Mechanisms in Organisms', 'Nutrient Cycles (Carbon & Nitrogen)', 'Reproductive System in Plants & Animals'],
+    'Chemistry': ['Gas Laws (Boyle’s, Charles’s, Ideal Gas)', 'Acids, Bases and Salts', 'Rates of Chemical Reactions', 'Chemical Equilibrium', 'Carbon & Its Inorganic Compounds', 'Introduction to Hydrocarbons (Alkanes, Alkenes)'],
+    'Physics': ['Curved Mirrors & Lenses (Optics)', 'Sound Waves: Reflection & Resonance', 'Heat Energy: Specific Heat Capacity', 'Thermal Expansion & Gas Thermometry', 'Current Electricity: Ohm’s Law & Resistance', 'Electric Field & Capacitance'],
+    'Economics': ['Market Structures (Perfect Competition & Monopoly)', 'Public Finance & Government Revenue', 'National Income Accounting (GDP, GNP)', 'Money & Commercial Banking', 'Population Dynamics & Labour Force'],
+  },
+  'SS 3': {
+    'General Mathematics': ['Coordinate Geometry & Straight Lines', 'Differentiation & Applications (Calculus)', 'Integration & Area under Curves', 'Matrices & Determinants', 'Vectors in Two Dimensions', 'Circle Theorems & Cyclic Quadrilaterals'],
+    'English Language': ['Speech Writing & Formal Addresses', 'Syntactic Structures & Sentence Analysis', 'Advanced Lexis & Register (Law, Medicine, Commerce)', 'Intonation Patterns & Nuclear Stress', 'Comprehensive Past Papers Revision'],
+    'Biology': ['Genetics: Mendel’s Laws of Inheritance', 'Chromosomes & DNA Replication', 'Variation in Populations (Morphological & Physiological)', 'Evolution: Lamarckism & Darwinism', 'Sensory Organs: Eye & Ear Defects', 'Ecology & Environmental Conservation'],
+    'Chemistry': ['Organic Chemistry: Alcohols, Aldehydes, Carboxylic Acids', 'Thermochemistry & Hess’s Law', 'Electrochemistry: Electrolysis & Cells', 'Metals & Extraction (Iron, Aluminium)', 'Water & Water Pollution', 'Qualitative Analysis (Salt Analysis)'],
+    'Physics': ['Electromagnetic Induction & Transformers', 'Alternating Current (AC) Circuits & Resonance', 'Radioactivity & Nuclear Decay', 'Photoelectric Effect & Quantum Physics', 'Gravitational Field & Planetary Motion', 'Energy Quantization & X-rays'],
+    'Economics': ['International Trade & Balance of Payments', 'Tariffs & Trade Restrictions', 'Economic Development & Planning', 'International Financial Organizations (IMF, World Bank)', 'Petroleum & the Nigerian Economy'],
+  },
+};
+
+export function createSchoolExamDefinition(
+  educationLevel: EducationLevel,
+  classLevel: string,
+  term: string,
+  assessmentType: string,
+  subject: string
+): ExamDefinition {
+  return {
+    id: `school_${educationLevel}_${classLevel.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${term.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+    name: `${classLevel} ${subject} — ${term} ${assessmentType}`,
+    shortName: `${classLevel} ${subject} (${term})`,
+    level: educationLevel,
+    category: 'school_exam',
+    classLevel,
+    term,
+    assessmentType,
+    description: `Class-level school examination and continuous assessment practice tailored for ${classLevel} ${subject} (${term}).`,
+    subjects: SUBJECTS_BY_LEVEL[educationLevel] || [subject],
+    years: [2025, 2024, 2023, 2022],
+    timedByDefault: true,
+    defaultTimeMinutes: educationLevel === 'primary' ? 30 : 45,
+    officialPastQuestionsAvailable: true,
+  };
+}
 
 export const NIGERIAN_EXAMS: ExamDefinition[] = [
   {
@@ -6,6 +148,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'Joint Admissions and Matriculation Board (JAMB / UTME)',
     shortName: 'JAMB / UTME',
     level: 'senior_secondary',
+    category: 'standardized_exam',
     description: 'Computer-Based Test for university and tertiary institution entrance across Nigeria.',
     subjects: [
       'Use of English',
@@ -32,6 +175,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'West African Senior School Certificate Examination (WAEC / WASSCE)',
     shortName: 'WAEC (WASSCE)',
     level: 'senior_secondary',
+    category: 'standardized_exam',
     description: 'Senior school exit examination for Nigeria, Ghana, Sierra Leone, Liberia, and The Gambia.',
     subjects: [
       'English Language',
@@ -60,6 +204,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'National Examinations Council (NECO SSCE)',
     shortName: 'NECO SSCE',
     level: 'senior_secondary',
+    category: 'standardized_exam',
     description: 'National senior secondary certificate examination conducted across all Nigerian states.',
     subjects: [
       'English Language',
@@ -83,6 +228,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'National Business and Technical Examinations Board (NABTEB)',
     shortName: 'NABTEB',
     level: 'senior_secondary',
+    category: 'standardized_exam',
     description: 'Technical, vocational, craft, and commercial examinations in Nigeria.',
     subjects: [
       'English Language',
@@ -104,6 +250,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'Basic Education Certificate Examination (BECE / Junior WAEC)',
     shortName: 'BECE (Junior WAEC)',
     level: 'junior_secondary',
+    category: 'standardized_exam',
     description: 'Exit examination for junior secondary school students transitioning to senior secondary.',
     subjects: [
       'English Studies',
@@ -127,6 +274,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'National Common Entrance Examination (NCEE)',
     shortName: 'National Common Entrance',
     level: 'primary',
+    category: 'standardized_exam',
     description: 'Admission examination for Federal Unity Colleges and top secondary schools in Nigeria.',
     subjects: [
       'Quantitative Aptitude',
@@ -146,6 +294,7 @@ export const NIGERIAN_EXAMS: ExamDefinition[] = [
     name: 'University Semester & Faculty Examinations',
     shortName: 'University Semester Exams',
     level: 'university',
+    category: 'standardized_exam',
     description: 'Undergraduate and departmental course exams across Nigerian federal, state, and private universities.',
     subjects: [
       'GST 101 - Use of English & Communication Skills',
@@ -478,5 +627,159 @@ export const SEED_PAST_QUESTIONS: QuizQuestion[] = [
     correctAnswer: 'B. Scanning',
     correctOptionIndex: 1,
     explanation: 'Scanning is glancing rapidly through text specifically searching for a predetermined key word, number, or piece of data without reading every sentence. Skimming is reading quickly to grasp the general overview.',
+  },
+
+  // Primary 4 Mathematics (Second Term School Exam)
+  {
+    id: 'pri4-math-t2-01',
+    examName: 'Primary School Exams',
+    subject: 'Mathematics',
+    year: 2024,
+    topic: 'Fractions & Decimals',
+    difficulty: 'easy',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (Primary 4 Exam)',
+    question: 'Convert the fraction 3/4 to a decimal.',
+    options: [
+      'A. 0.25',
+      'B. 0.50',
+      'C. 0.75',
+      'D. 0.85',
+    ],
+    correctAnswer: 'C. 0.75',
+    correctOptionIndex: 2,
+    explanation: 'To convert 3/4 to a decimal, divide the numerator by the denominator: 3 ÷ 4 = 0.75.',
+  },
+
+  // Primary 5 English Language (First Term School Exam)
+  {
+    id: 'pri5-eng-t1-01',
+    examName: 'Primary School Exams',
+    subject: 'English Language',
+    year: 2024,
+    topic: 'Parts of Speech (Nouns & Pronouns)',
+    difficulty: 'easy',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (Primary 5 Exam)',
+    question: 'Identify the pronoun in the sentence: "Emeka told his sister that she should read her books."',
+    options: [
+      'A. Emeka',
+      'B. sister',
+      'C. she',
+      'D. books',
+    ],
+    correctAnswer: 'C. she',
+    correctOptionIndex: 2,
+    explanation: '"She" is a personal pronoun that takes the place of the noun "sister" in the sentence.',
+  },
+
+  // Primary 5 Basic Science (Second Term School Exam)
+  {
+    id: 'pri5-sci-t2-01',
+    examName: 'Primary School Exams',
+    subject: 'Basic Science',
+    year: 2024,
+    topic: 'Magnetism & Magnetic Fields',
+    difficulty: 'easy',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (Primary 5 Exam)',
+    question: 'Which of the following materials is magnetic and will be attracted by a bar magnet?',
+    options: [
+      'A. Wooden stick',
+      'B. Iron nail',
+      'C. Plastic ruler',
+      'D. Glass cup',
+    ],
+    correctAnswer: 'B. Iron nail',
+    correctOptionIndex: 1,
+    explanation: 'Iron is a ferromagnetic metal, so an iron nail is strongly attracted by a magnetic field. Wood, plastic, and glass are non-magnetic.',
+  },
+
+  // JSS 2 Basic Science (Second Term School Exam)
+  {
+    id: 'jss2-sci-t2-01',
+    examName: 'Junior Secondary School Exams',
+    subject: 'Basic Science',
+    year: 2024,
+    topic: 'Skeletal System & Locomotion',
+    difficulty: 'medium',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (JSS 2 Exam)',
+    question: 'Which type of movable joint permits movement in only one plane, like the opening and closing of a door?',
+    options: [
+      'A. Ball and socket joint',
+      'B. Hinge joint',
+      'C. Pivot joint',
+      'D. Gliding joint',
+    ],
+    correctAnswer: 'B. Hinge joint',
+    correctOptionIndex: 1,
+    explanation: 'A hinge joint (found at the elbow and knee) allows back-and-forth movement in one plane, similar to a hinged door.',
+  },
+
+  // JSS 1 Mathematics (First Term School Exam)
+  {
+    id: 'jss1-math-t1-01',
+    examName: 'Junior Secondary School Exams',
+    subject: 'Mathematics',
+    year: 2024,
+    topic: 'Basic Algebra (Variables & Expressions)',
+    difficulty: 'easy',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (JSS 1 Exam)',
+    question: 'If 3x + 7 = 22, what is the value of x?',
+    options: [
+      'A. 3',
+      'B. 5',
+      'C. 7',
+      'D. 15',
+    ],
+    correctAnswer: 'B. 5',
+    correctOptionIndex: 1,
+    explanation: 'Subtract 7 from both sides: 3x = 22 - 7 = 15. Then divide both sides by 3: x = 15 / 3 = 5.',
+  },
+
+  // SS 2 Biology (Second Term School Exam)
+  {
+    id: 'ss2-bio-t2-01',
+    examName: 'Senior Secondary School Exams',
+    subject: 'Biology',
+    year: 2024,
+    topic: 'Transport System & Blood Circulation',
+    difficulty: 'medium',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (SS 2 Exam)',
+    question: 'Which chamber of the human mammalian heart has the thickest muscular wall and pumps oxygenated blood throughout the systemic circulation?',
+    options: [
+      'A. Right atrium',
+      'B. Right ventricle',
+      'C. Left atrium',
+      'D. Left ventricle',
+    ],
+    correctAnswer: 'D. Left ventricle',
+    correctOptionIndex: 3,
+    explanation: 'The left ventricle has the thickest myocardium because it must generate high hydrostatic pressure to pump oxygenated blood through the aorta into all systemic tissues of the body.',
+  },
+
+  // SS 1 Mathematics (First Term School Exam)
+  {
+    id: 'ss1-math-t1-01',
+    examName: 'Senior Secondary School Exams',
+    subject: 'General Mathematics',
+    year: 2024,
+    topic: 'Number Bases & Conversions',
+    difficulty: 'medium',
+    sourceType: 'past_question',
+    sourceLabel: '📜 Past Question (SS 1 Exam)',
+    question: 'Convert 11011 (base 2) to base 10.',
+    options: [
+      'A. 23',
+      'B. 25',
+      'C. 27',
+      'D. 31',
+    ],
+    correctAnswer: 'C. 27',
+    correctOptionIndex: 2,
+    explanation: '$11011_2 = (1 \\times 2^4) + (1 \\times 2^3) + (0 \\times 2^2) + (1 \\times 2^1) + (1 \\times 2^0) = 16 + 8 + 0 + 2 + 1 = 27_{10}$.',
   },
 ];
