@@ -13,6 +13,8 @@ import {
   Cloud,
   CloudCheck,
   LogIn,
+  CreditCard,
+  Crown,
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { StudentProfile, StudyBuddyDailyLimit } from '../types';
@@ -69,6 +71,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'examprep', label: 'ExamPrep AI', icon: Zap, badge: 'Past Questions & Mocks' },
     { id: 'progress', label: 'Progress', icon: BarChart3 },
     { id: 'planner', label: 'Study Planner', icon: Calendar },
+    { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },
   ];
 
 
@@ -168,6 +171,29 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* Paystack Upgrade / Pro Status Badge */}
+            {profile.isPremium ? (
+              <button
+                id="nav-pro-badge-btn"
+                onClick={() => setCurrentTab('pricing')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-bold hover:bg-amber-100 transition-all shadow-2xs group"
+                title="LearnLab Pro Active • Click to view subscription"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                <span>PRO ACTIVE</span>
+              </button>
+            ) : (
+              <button
+                id="nav-upgrade-btn"
+                onClick={() => setCurrentTab('pricing')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold shadow-xs transition-all active:scale-[0.98]"
+                title="Upgrade with Paystack for unlimited AI tutoring"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+                <span>Upgrade</span>
+              </button>
+            )}
+
             {/* StudyBuddy AI Quick Pill Button */}
             <button
               id="studybuddy-quick-btn"
@@ -183,7 +209,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                 </div>
                 <div className="flex items-center gap-1 text-[10px] text-indigo-700">
-                  <span>{studyBuddyLimit.usedCount}/{studyBuddyLimit.maxLimit} replies today</span>
+                  {profile.isPremium ? (
+                    <span className="font-semibold text-emerald-700">Unlimited • Pro Active</span>
+                  ) : (
+                    <span>{studyBuddyLimit.usedCount}/{studyBuddyLimit.maxLimit} replies today</span>
+                  )}
                 </div>
               </div>
             </button>
@@ -194,9 +224,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="mobile-studybuddy-btn"
               onClick={onOpenStudyBuddy}
-              className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200"
+              className="flex flex-col items-center justify-center px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors shadow-2xs group"
+              aria-label="StudyBuddy AI"
             >
-              <Sparkles className="w-5 h-5" />
+              <Sparkles className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition-transform" />
+              <span className="text-[9px] font-bold text-indigo-950 mt-0.5 leading-none tracking-tight whitespace-nowrap">
+                StudyBuddy AI
+              </span>
             </button>
             <button
               id="mobile-menu-toggle-btn"

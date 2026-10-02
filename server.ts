@@ -436,8 +436,13 @@ Your role:
 - Use context from the student's saved notes or weak topics when provided:
   ${studentContext?.weakTopics?.length ? `Student Weak Areas: ${studentContext.weakTopics.join(', ')}` : ''}
   ${studentContext?.recentNoteSummary ? `Recent Note Context: ${studentContext.recentNoteSummary}` : ''}
-- Format answers clearly using markdown, step-by-step logic, bullet points, and memorable analogies.
-- Keep explanations concise, warm, educational, and easy to grasp without overwhelming.`;
+- Format answers clearly using clean step-by-step logic, bullet points, and memorable analogies.
+- Keep explanations concise, warm, educational, and easy to grasp without overwhelming.
+- CRITICAL FORMATTING DIRECTIVES:
+  1. DO NOT use markdown hashtags (NEVER use '###', '##', or '#') for headings. Use clean numbered titles (e.g., '1. Carbon Fixation (The Catching Phase)') or clear section headers.
+  2. DO NOT use asterisks for bullet points (NEVER start lines with '*'). Use clean standard bullets (•) or numbers (1., 2., 3.).
+  3. Do not clutter text with unnecessary asterisks or hashtags. Keep the explanation clean and readable for students.
+  4. In Mathematics explanations, never use '^' for powers; write 'raised to the power of' (e.g., '2 raised to the power of 4') so novices understand.`;
 
       const contents: any[] = [];
 
@@ -490,11 +495,17 @@ Your role:
         replyText = response.text || '';
       } catch (apiErr: any) {
         console.warn('Gemini API temporary load; generating resilient tutoring answer:', apiErr?.message);
-        // Helpful fallback explanation tailored to user's question
-        replyText = `**Great question about this topic!** 💡\n\nHere is a clear, step-by-step breakdown tailored for **${effectiveGrade}**:\n\n1. **Core Concept**: To master "${userMessage.slice(0, 60)}...", always start by identifying the fundamental definition and given parameters.\n2. **Step-by-Step Method**:\n   - Clarify the core formula or rule that governs this problem.\n   - Substitute known values methodically to avoid careless arithmetic errors.\n   - Double-check units and edge conditions (crucial for WAEC/JAMB CBT).\n3. **Memory Tip**: Relate this concept to everyday analogies or use mnemonics to retain it for exam day.\n\n*Would you like me to give you a quick practice question on this, or explain any specific part further?*`;
+        // Helpful fallback explanation tailored to user's question without raw asterisks or hashtags
+        replyText = `Great question about this topic! 💡\n\nHere is a clear, step-by-step breakdown tailored for ${effectiveGrade}:\n\n1. Core Concept: To master "${userMessage.slice(0, 60)}...", always start by identifying the fundamental definition and given parameters.\n\n2. Step-by-Step Method:\n   • Clarify the core formula or rule that governs this problem.\n   • Substitute known values methodically to avoid careless arithmetic errors.\n   • Double-check units and edge conditions (crucial for WAEC/JAMB CBT).\n\n3. Memory Tip: Relate this concept to everyday analogies or use mnemonics to retain it for exam day.\n\nWould you like me to give you a quick practice question on this, or explain any specific part further?`;
       }
 
-      return res.json({ success: true, reply: replyText });
+      // Sanitize response: strip markdown hashtags and convert asterisk bullets
+      const cleanReply = replyText
+        .replace(/^#{1,6}\s+/gm, '') // Remove markdown hashtags: e.g. ### Title -> Title
+        .replace(/^---+\s*$/gm, '') // Remove decorative horizontal rules
+        .replace(/^\s*\*\s+/gm, '• '); // Replace asterisk bullets with clean bullet dots
+
+      return res.json({ success: true, reply: cleanReply });
     } catch (err: any) {
       console.error('StudyBuddy AI Error:', err);
       return res.status(500).json({
@@ -713,6 +724,191 @@ Return JSON with:
         details: err.message,
       });
     }
+  });
+
+  // ==========================================
+  // PAYSTACK PAYMENT INTEGRATION
+  // ==========================================
+
+  // Paystack Configuration status check
+  app.get('/api/paystack/config', (req, res) => {
+    const hasSecret = Boolean(process.env.PAYSTACK_SECRET_KEY);
+    const publicKey = process.env.PAYSTACK_PUBLIC_KEY || '';
+    return res.json({
+      configured: hasSecret,
+      publicKey,
+      currency: 'NGN',
+    });
+  });
+
+  // Paystack Initialize Transaction
+  app.post('/api/paystack/initialize', async (req, res) => {
+    try {
+      const { email, amount, planId, planName, billingCycle, userId, studentName, callbackUrl } = req.body;
+
+      if (!email || !amount || !planId) {
+        return res.status(400).json({ error: 'Email, amount, and planId are required to initialize payment.' });
+      }
+
+      const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
+      const paystackPublic = process.env.PAYSTACK_PUBLIC_KEY || '';
+      const reference = `LL-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+      if (paystackSecret) {
+        // Amount in Paystack is strictly in Kobo (100 kobo = 1 Naira)
+        const amountInKobo = Math.round(Number(amount) * 100);
+
+        const response = await fetch('https://api.paystack.co/transaction/initialize', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${paystackSecret}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            amount: amountInKobo,
+            currency: 'NGN',
+            reference,
+            callback_url: callbackUrl || undefined,
+            metadata: {
+              userId: userId || 'anonymous',
+              studentName: studentName || 'LearnLab Student',
+              planId,
+              planName: planName || planId,
+              billingCycle: billingCycle || 'monthly',
+              custom_fields: [
+                {
+                  display_name: 'Student Name',
+                  variable_name: 'student_name',
+                  value: studentName || 'Student',
+                },
+                {
+                  display_name: 'Subscription Plan',
+                  variable_name: 'plan',
+                  value: `${planName || planId} (${billingCycle || 'monthly'})`,
+                },
+              ],
+            },
+          }),
+        });
+
+        const data: any = await response.json();
+
+        if (!data.status) {
+          console.error('Paystack initialization error response:', data);
+          return res.status(400).json({
+            error: data.message || 'Failed to initialize Paystack payment.',
+            details: data,
+          });
+        }
+
+        return res.json({
+          success: true,
+          authorizationUrl: data.data.authorization_url,
+          accessCode: data.data.access_code,
+          reference: data.data.reference,
+          publicKey: paystackPublic,
+          isLive: true,
+        });
+      } else {
+        // Sandbox Simulation Mode (Handles missing keys gracefully as mandated)
+        const testRef = `LL-TEST-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+        return res.json({
+          success: true,
+          authorizationUrl: null,
+          accessCode: `TEST-ACCESS-${Date.now()}`,
+          reference: testRef,
+          publicKey: '',
+          isLive: false,
+          isTestMode: true,
+          message: 'Paystack is operating in Sandbox Simulation mode. Configure PAYSTACK_SECRET_KEY in Settings to process real payments.',
+        });
+      }
+    } catch (err: any) {
+      console.error('Paystack Initialize Exception:', err);
+      return res.status(500).json({
+        error: 'Failed to initialize Paystack transaction.',
+        details: err.message,
+      });
+    }
+  });
+
+  // Paystack Verify Transaction
+  app.post('/api/paystack/verify', async (req, res) => {
+    try {
+      const { reference, planId, planName, billingCycle, amount, email } = req.body;
+
+      if (!reference) {
+        return res.status(400).json({ error: 'Transaction reference is required for verification.' });
+      }
+
+      const paystackSecret = process.env.PAYSTACK_SECRET_KEY;
+
+      // Check if this was a sandbox test reference or keys are not yet configured
+      if (!paystackSecret || reference.startsWith('LL-TEST-')) {
+        return res.json({
+          success: true,
+          verified: true,
+          isTestMode: true,
+          reference,
+          amount: Number(amount) || 3500,
+          planId: planId || 'pro',
+          planName: planName || 'LearnLab Pro',
+          billingCycle: billingCycle || 'monthly',
+          channel: 'Test Simulator (Card/Transfer)',
+          paidAt: new Date().toISOString(),
+          customerEmail: email || 'student@learnlab.ng',
+          message: 'Payment verified successfully in sandbox simulator.',
+        });
+      }
+
+      // Verify with real Paystack API
+      const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${paystackSecret}`,
+        },
+      });
+
+      const data: any = await response.json();
+
+      if (data.status && data.data?.status === 'success') {
+        const tx = data.data;
+        return res.json({
+          success: true,
+          verified: true,
+          isLive: true,
+          reference: tx.reference,
+          amount: tx.amount ? tx.amount / 100 : Number(amount), // Convert back from kobo to Naira
+          planId: tx.metadata?.planId || planId || 'pro',
+          planName: tx.metadata?.planName || planName || 'LearnLab Pro',
+          billingCycle: tx.metadata?.billingCycle || billingCycle || 'monthly',
+          channel: tx.channel || 'card',
+          paidAt: tx.paid_at || new Date().toISOString(),
+          customerEmail: tx.customer?.email || email,
+          gatewayResponse: tx.gateway_response,
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          verified: false,
+          message: data.data?.gateway_response || data.message || 'Transaction verification unsuccessful.',
+          data: data.data,
+        });
+      }
+    } catch (err: any) {
+      console.error('Paystack Verification Exception:', err);
+      return res.status(500).json({
+        error: 'Failed to verify Paystack transaction.',
+        details: err.message,
+      });
+    }
+  });
+
+  // Paystack Webhook Handler
+  app.post('/api/paystack/webhook', (req, res) => {
+    // Acknowledge receipt of Paystack webhook
+    return res.status(200).send('Webhook received');
   });
 
   // Vite middleware for development vs static build in production

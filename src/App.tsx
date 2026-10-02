@@ -9,6 +9,7 @@ import { StudyPlanner } from './components/planner/StudyPlanner';
 import { StudyBuddyModal } from './components/studybuddy/StudyBuddyModal';
 import { OnboardingModal } from './components/OnboardingModal';
 import { AccountManagement } from './components/account/AccountManagement';
+import { PricingPaymentPage } from './components/pricing/PricingPaymentPage';
 import { Logo } from './components/Logo';
 import { useAuth } from './context/AuthContext';
 import { DEFAULT_PROFILE } from './data/initialData';
@@ -21,6 +22,7 @@ import {
   QuizResult,
   StudyBuddyDailyLimit,
   ExamReadinessScore,
+  PaymentTransaction,
 } from './types';
 import {
   getStoredProfile,
@@ -37,6 +39,8 @@ import {
   saveStoredQuizHistory,
   getStoredStudyBuddyLimit,
   saveStoredStudyBuddyLimit,
+  getStoredTransactions,
+  saveStoredTransactions,
   clearAllStoredUserData,
   calculateExamReadiness,
 } from './utils/storage';
@@ -52,6 +56,7 @@ import {
   syncCountdownItem,
   deleteCountdownFromFirestore,
   syncQuizResult,
+  syncPaymentTransaction,
   subscribeToUserData,
   eraseAllUserFirestoreData,
 } from './lib/firestoreService';
@@ -77,6 +82,7 @@ export const App: React.FC = () => {
   const [tasks, setTasks] = useState<StudyPlannerTask[]>(getStoredTasks());
   const [countdowns, setCountdowns] = useState<ExamCountdownItem[]>(getStoredCountdowns());
   const [quizHistory, setQuizHistory] = useState<QuizResult[]>(getStoredQuizHistory());
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>(getStoredTransactions());
   const [studyBuddyLimit, setStudyBuddyLimit] = useState<StudyBuddyDailyLimit>(
     getStoredStudyBuddyLimit()
   );
@@ -105,6 +111,7 @@ export const App: React.FC = () => {
       setMistakes([]);
       setCountdowns([]);
       setQuizHistory([]);
+      setTransactions([]);
       setProfile(DEFAULT_PROFILE);
       clearAllStoredUserData();
       saveStoredProfile(DEFAULT_PROFILE);
@@ -180,6 +187,11 @@ export const App: React.FC = () => {
         const list = remoteHistory || [];
         setQuizHistory(list);
         saveStoredQuizHistory(list);
+      },
+      onTransactions: (remoteTx) => {
+        const list = remoteTx || [];
+        setTransactions(list);
+        saveStoredTransactions(list);
       },
     });
 
@@ -281,6 +293,17 @@ export const App: React.FC = () => {
     if (user) {
       syncQuizResult(user.uid, { ...result, userId: user.uid });
       updatedMistakes.forEach((m) => syncMistakeItem(user.uid, { ...m, userId: user.uid }));
+    }
+  };
+
+  // Paystack upgrade success handler
+  const handleUpgradeSuccess = (updatedProfile: StudentProfile, newTx: PaymentTransaction) => {
+    handleUpdateProfile(updatedProfile);
+    const updatedTxs = [newTx, ...transactions.filter((t) => t.reference !== newTx.reference)];
+    setTransactions(updatedTxs);
+    saveStoredTransactions(updatedTxs);
+    if (user) {
+      syncPaymentTransaction(user.uid, { ...newTx, userId: user.uid });
     }
   };
 
@@ -476,6 +499,17 @@ export const App: React.FC = () => {
             onSaveProfile={handleUpdateProfile}
             onEraseAllData={handleEraseAllUserData}
             onNavigateToStudy={() => setCurrentTab('study')}
+            onNavigateToPricing={() => setCurrentTab('pricing')}
+          />
+        )}
+
+        {activeTab === 'pricing' && (
+          <PricingPaymentPage
+            profile={profile}
+            transactions={transactions}
+            onUpgradeSuccess={handleUpgradeSuccess}
+            onNavigateToDashboard={() => setCurrentTab('dashboard')}
+            onNavigateToStudy={() => setCurrentTab('study')}
           />
         )}
       </main>
@@ -488,6 +522,7 @@ export const App: React.FC = () => {
         limit={studyBuddyLimit}
         onUpdateLimit={handleUpdateStudyBuddyLimit}
         initialContext={studyBuddyInitialContext}
+        onNavigateToPricing={() => setCurrentTab('pricing')}
       />
 
       {/* Footer */}

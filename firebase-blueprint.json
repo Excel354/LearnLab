@@ -133,6 +133,25 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "userId", "examName", "targetDate"]
+    },
+    "PaymentTransaction": {
+      "title": "PaymentTransaction",
+      "description": "Paystack payment transaction log and subscription receipt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "reference": { "type": "string", "maxLength": 128 },
+        "amount": { "type": "number" },
+        "planId": { "type": "string", "maxLength": 80 },
+        "planName": { "type": "string", "maxLength": 100 },
+        "billingCycle": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "maxLength": 30 },
+        "currency": { "type": "string", "maxLength": 10 },
+        "paidAt": { "type": "string", "maxLength": 50 },
+        "customerEmail": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["id", "userId", "reference", "amount", "planId", "status", "paidAt"]
     }
   },
   "firestore": {
@@ -159,6 +178,10 @@
     "/users/{userId}/countdowns/{countdownId}": {
       "schema": { "$ref": "#/entities/ExamCountdownItem" },
       "description": "Target exam countdown date items"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/PaymentTransaction" },
+      "description": "User Paystack payment transactions and subscription receipts"
     }
   }
 }

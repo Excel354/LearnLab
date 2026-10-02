@@ -8,6 +8,7 @@ import {
   StudyBuddyMessage,
   StudyBuddyDailyLimit,
   ExamReadinessScore,
+  PaymentTransaction,
 } from '../types';
 import {
   DEFAULT_PROFILE,
@@ -26,6 +27,7 @@ const KEYS = {
   COUNTDOWNS: 'learnlab_exam_countdowns',
   STUDYBUDDY_MESSAGES: 'learnlab_studybuddy_messages',
   STUDYBUDDY_LIMIT: 'learnlab_studybuddy_daily_limit',
+  TRANSACTIONS: 'learnlab_payment_transactions',
 };
 
 // Profile
@@ -267,10 +269,36 @@ export function clearAllStoredUserData(): void {
     localStorage.removeItem(KEYS.COUNTDOWNS);
     localStorage.removeItem(KEYS.STUDYBUDDY_MESSAGES);
     localStorage.removeItem(KEYS.STUDYBUDDY_LIMIT);
+    localStorage.removeItem(KEYS.TRANSACTIONS);
     localStorage.setItem(KEYS.PROFILE, JSON.stringify(DEFAULT_PROFILE));
   } catch (e) {
     console.error('Failed to clear stored user data', e);
   }
+}
+
+// Payment Transactions Storage
+export function getStoredTransactions(): PaymentTransaction[] {
+  try {
+    const raw = localStorage.getItem(KEYS.TRANSACTIONS);
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+export function saveStoredTransactions(transactions: PaymentTransaction[]): void {
+  try {
+    localStorage.setItem(KEYS.TRANSACTIONS, JSON.stringify(transactions));
+  } catch (e) {
+    console.error('Failed to save transactions', e);
+  }
+}
+
+export function addStoredTransaction(tx: PaymentTransaction): void {
+  const current = getStoredTransactions();
+  const updated = [tx, ...current.filter((t) => t.reference !== tx.reference)];
+  saveStoredTransactions(updated);
 }
 
 // Exam Readiness Calculator

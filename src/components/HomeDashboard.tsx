@@ -13,6 +13,7 @@ import {
   FileText,
   HelpCircle,
   Award,
+  Crown,
 } from 'lucide-react';
 import { StudentProfile, StudyNote, MistakeItem, StudyPlannerTask, ExamReadinessScore, ExamCountdownItem } from '../types';
 import { formatMathPowerText } from '../utils/mathFormat';
@@ -71,7 +72,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
 
         <div className="relative z-10 space-y-3 max-w-2xl">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] uppercase tracking-widest text-indigo-300 font-bold px-2.5 py-1 bg-indigo-900/60 border border-indigo-400/30 rounded-md">
               {profile.grade} • {profile.country}
             </span>
@@ -79,6 +80,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
               {profile.studyStreakDays} {profile.studyStreakDays === 1 ? 'Day' : 'Days'} Streak
             </span>
+            {profile.isPremium ? (
+              <span className="text-xs text-amber-300 font-bold flex items-center gap-1 px-2.5 py-1 bg-amber-400/20 border border-amber-300/40 rounded-md">
+                <Crown className="w-3.5 h-3.5 text-amber-300" />
+                PRO
+              </span>
+            ) : (
+              <button
+                id="dashboard-upgrade-to-pro-btn"
+                onClick={() => onNavigate('pricing')}
+                className="text-xs text-indigo-200 hover:text-white font-medium flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white/20 border border-white/20 rounded-md transition-colors"
+              >
+                <Sparkles className="w-3 h-3 text-indigo-300" />
+                Upgrade to Pro
+              </button>
+            )}
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">

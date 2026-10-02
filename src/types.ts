@@ -241,3 +241,35 @@ export interface ExamReadinessScore {
   };
   subjectMastery: Record<string, number>;
 }
+
+export type BillingCycle = 'monthly' | 'termly' | 'annual';
+
+export interface PaymentPlan {
+  id: string;
+  name: string;
+  badge?: string;
+  tagline: string;
+  popular?: boolean;
+  prices: {
+    monthly: number;
+    termly: number;
+    annual: number;
+  };
+  features: string[];
+  recommendedFor: string;
+}
+
+export interface PaymentTransaction {
+  id: string;
+  userId: string;
+  reference: string;
+  amount: number;
+  planId: string;
+  planName: string;
+  billingCycle: BillingCycle;
+  status: 'success' | 'pending' | 'failed';
+  currency: string;
+  paidAt: string;
+  customerEmail: string;
+  channel?: string;
+}

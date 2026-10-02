@@ -99,6 +99,16 @@ service cloud.firestore {
         && data.targetDate is string && data.targetDate.size() <= 50;
     }
 
+    function isValidPaymentTransaction(data, userId) {
+      return data.id is string && isValidId(data.id)
+        && data.userId is string && data.userId == userId
+        && data.reference is string && data.reference.size() <= 128
+        && data.amount is number && data.amount > 0
+        && data.planId is string && data.planId.size() <= 80
+        && data.status is string && data.status.size() <= 30
+        && data.paidAt is string && data.paidAt.size() <= 50;
+    }
+
     // --- User Profiles & Subcollections ---
 
     match /users/{userId} {
@@ -158,6 +168,16 @@ service cloud.firestore {
         allow update: if isOwner(userId) && isValidId(countdownId) && isValidCountdownItem(incoming(), userId)
           && incoming().id == existing().id && incoming().userId == existing().userId;
         allow delete: if isOwner(userId) && isValidId(countdownId);
+      }
+
+      // Payment Transactions Subcollection
+      match /transactions/{transactionId} {
+        allow get: if isOwner(userId) && isValidId(transactionId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(transactionId) && isValidPaymentTransaction(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(transactionId) && isValidPaymentTransaction(incoming(), userId)
+          && incoming().id == existing().id && incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(transactionId);
       }
     }
   }

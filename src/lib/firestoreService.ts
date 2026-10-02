@@ -18,6 +18,7 @@ import {
   MistakeItem,
   ExamCountdownItem,
   QuizResult,
+  PaymentTransaction,
 } from '../types';
 
 /**
@@ -238,6 +239,24 @@ export async function syncQuizResult(userId: string, quizResult: QuizResult): Pr
 }
 
 /**
+ * Save a payment transaction record to Firestore
+ */
+export async function syncPaymentTransaction(userId: string, transaction: PaymentTransaction): Promise<void> {
+  if (!userId || !transaction.id) return;
+  const path = `users/${userId}/transactions/${transaction.id}`;
+  try {
+    const docRef = doc(db, 'users', userId, 'transactions', transaction.id);
+    const cleaned = cleanFirestorePayload({
+      ...transaction,
+      userId,
+    });
+    await setDoc(docRef, cleaned);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+/**
  * Subscribe to all user data collections in real time
  */
 export function subscribeToUserData(
@@ -249,6 +268,7 @@ export function subscribeToUserData(
     onMistakes?: (mistakes: MistakeItem[]) => void;
     onCountdowns?: (countdowns: ExamCountdownItem[]) => void;
     onQuizHistory?: (history: QuizResult[]) => void;
+    onTransactions?: (transactions: PaymentTransaction[]) => void;
   }
 ): () => void {
   const unsubscribes: Unsubscribe[] = [];
@@ -352,6 +372,22 @@ export function subscribeToUserData(
     unsubscribes.push(unsubQuiz);
   }
 
+  // Payment Transactions listener
+  if (callbacks.onTransactions) {
+    const txPath = `users/${userId}/transactions`;
+    const unsubTx = onSnapshot(
+      collection(db, 'users', userId, 'transactions'),
+      (snap) => {
+        const items = snap.docs.map((d) => d.data() as PaymentTransaction);
+        callbacks.onTransactions?.(items);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, txPath);
+      }
+    );
+    unsubscribes.push(unsubTx);
+  }
+
   return () => {
     unsubscribes.forEach((unsub) => unsub());
   };
@@ -360,11 +396,11 @@ export function subscribeToUserData(
 /**
  * Permanently erase all user-specific data from Firestore
  * Scoped strictly to the authenticated user's ID
- * Removes notes, tasks, mistakes, countdowns, and quizHistory collections
+ * Removes notes, tasks, mistakes, countdowns, quizHistory, and transactions collections
  */
 export async function eraseAllUserFirestoreData(userId: string): Promise<void> {
   if (!userId) return;
-  const subcollections = ['notes', 'tasks', 'mistakes', 'countdowns', 'quizHistory'];
+  const subcollections = ['notes', 'tasks', 'mistakes', 'countdowns', 'quizHistory', 'transactions'];
 
   for (const subcol of subcollections) {
     const colPath = `users/${userId}/${subcol}`;

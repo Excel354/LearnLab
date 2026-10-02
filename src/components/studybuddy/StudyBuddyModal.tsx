@@ -15,6 +15,8 @@ import {
 import { Logo } from '../Logo';
 import { StudentProfile, StudyBuddyMessage, StudyBuddyDailyLimit } from '../../types';
 import { formatMathPowerText } from '../../utils/mathFormat';
+import { StudyBuddyFormattedText } from './StudyBuddyFormattedText';
+import { cleanStudyBuddyPlainText } from '../../utils/studyBuddyFormatter';
 
 interface StudyBuddyModalProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ interface StudyBuddyModalProps {
   limit: StudyBuddyDailyLimit;
   onUpdateLimit: (limit: StudyBuddyDailyLimit) => void;
   initialContext?: string;
+  onNavigateToPricing?: () => void;
 }
 
 export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
@@ -32,6 +35,7 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
   limit,
   onUpdateLimit,
   initialContext,
+  onNavigateToPricing,
 }) => {
   const [messages, setMessages] = useState<StudyBuddyMessage[]>([
     {
@@ -66,7 +70,7 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isLimitReached = limit.usedCount >= limit.maxLimit;
+  const isLimitReached = !profile.isPremium && limit.usedCount >= limit.maxLimit;
 
   // Send Question to StudyBuddy AI endpoint
   const handleSendMessage = async (textToSend?: string) => {
@@ -150,7 +154,9 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
     }
 
     synthRef.current.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    // Clean text of hashtags and asterisks for smooth, natural speech synthesis
+    const cleanSpeechText = cleanStudyBuddyPlainText(text);
+    const utterance = new SpeechSynthesisUtterance(cleanSpeechText);
     utterance.lang = 'en-US';
     utterance.rate = 1.0;
     utterance.onend = () => setReadingMessageId(null);
@@ -190,15 +196,26 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Visible Daily Reply Meter (Mandated in Section 41) */}
-            <div className="bg-white/10 backdrop-blur-md px-3 py-1 rounded-xl border border-white/15 text-right">
-              <span className="text-[10px] font-bold text-indigo-200 uppercase block">
-                Daily Meter
-              </span>
-              <span className="text-xs font-bold text-white">
-                {limit.usedCount} / {limit.maxLimit} replies used
-              </span>
-            </div>
+            {/* Visible Daily Reply Meter (Mandated in Section 41) or Pro Badge */}
+            {profile.isPremium ? (
+              <div className="bg-amber-400/20 backdrop-blur-md px-3 py-1 rounded-xl border border-amber-300/40 text-right">
+                <span className="text-[10px] font-bold text-amber-200 uppercase block">
+                  Plan Status
+                </span>
+                <span className="text-xs font-bold text-amber-300">
+                  PRO • Unlimited
+                </span>
+              </div>
+            ) : (
+              <div className="bg-white/10 backdrop-blur-md px-3 py-1 rounded-xl border border-white/15 text-right">
+                <span className="text-[10px] font-bold text-indigo-200 uppercase block">
+                  Daily Meter
+                </span>
+                <span className="text-xs font-bold text-white">
+                  {limit.usedCount} / {limit.maxLimit} replies used
+                </span>
+              </div>
+            )}
 
             <button
               id="close-studybuddy-btn"
@@ -238,7 +255,7 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
                         : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{formatMathPowerText(msg.text)}</p>
+                    <StudyBuddyFormattedText text={msg.text} isAi={isAi} />
                   </div>
 
                   {isAi && (
@@ -283,11 +300,26 @@ export const StudyBuddyModal: React.FC<StudyBuddyModalProps> = ({
 
         {/* Daily Limit Notice when reached */}
         {isLimitReached && (
-          <div className="p-3.5 bg-amber-50 border-t border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-            <span>
-              You have reached your daily limit of {limit.maxLimit} StudyBuddy replies today. Your quota will reset automatically at midnight!
-            </span>
+          <div className="p-3.5 bg-amber-50 border-t border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>
+                You have reached your daily limit of {limit.maxLimit} free StudyBuddy replies today. Upgrade to Pro for unlimited answers!
+              </span>
+            </div>
+            {onNavigateToPricing && (
+              <button
+                id="limit-reached-upgrade-btn"
+                onClick={() => {
+                  if (synthRef.current) synthRef.current.cancel();
+                  onClose();
+                  onNavigateToPricing();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shrink-0 shadow-xs transition-colors"
+              >
+                Upgrade to Pro
+              </button>
+            )}
           </div>
         )}
 

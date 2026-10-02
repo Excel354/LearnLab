@@ -28,6 +28,8 @@ import {
   Upload,
   Image as ImageIcon,
   RefreshCw,
+  CreditCard,
+  Crown,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -52,6 +54,7 @@ interface AccountManagementProps {
   onSaveProfile: (profile: StudentProfile) => void;
   onEraseAllData: () => Promise<void>;
   onNavigateToStudy: () => void;
+  onNavigateToPricing?: () => void;
 }
 
 export const AccountManagement: React.FC<AccountManagementProps> = ({
@@ -64,6 +67,7 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
   onSaveProfile,
   onEraseAllData,
   onNavigateToStudy,
+  onNavigateToPricing,
 }) => {
   const { user, signInWithGoogle, logout } = useAuth();
 
@@ -880,7 +884,68 @@ export const AccountManagement: React.FC<AccountManagementProps> = ({
             </div>
           </section>
 
-          {/* Section 4: Data & Privacy */}
+          {/* Section 4: Subscription & Paystack Billing */}
+          <section
+            id="subscription-billing-section"
+            className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Plan & Subscription</h2>
+                  <p className="text-xs text-slate-500">
+                    Manage your LearnLab subscription and Paystack billing
+                  </p>
+                </div>
+              </div>
+
+              {profile.isPremium ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-xs">
+                  <Crown className="w-3.5 h-3.5" />
+                  PRO ACTIVE
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                  Free Starter
+                </span>
+              )}
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-slate-900">
+                    {profile.isPremium
+                      ? profile.subscriptionPlan === 'yearly'
+                        ? 'LearnLab Pro (Annual Plan)'
+                        : 'LearnLab Pro (Monthly Plan)'
+                      : 'Free Starter Plan'}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {profile.isPremium
+                      ? 'Enjoying unlimited StudyBuddy AI tutoring, full WAEC/JAMB past questions, and offline exports.'
+                      : 'Limited to 10 AI replies/day. Upgrade to unlock unlimited AI and premium exam papers.'}
+                  </div>
+                </div>
+
+                {onNavigateToPricing && (
+                  <button
+                    id="account-manage-subscription-btn"
+                    onClick={onNavigateToPricing}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold transition-colors shrink-0 shadow-xs"
+                  >
+                    <Crown className="w-3.5 h-3.5 text-amber-300" />
+                    {profile.isPremium ? 'Manage Subscription' : 'Upgrade with Paystack'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Section 5: Data & Privacy */}
           <section
             id="data-and-privacy-section"
             className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6"
