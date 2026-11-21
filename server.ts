@@ -66,104 +66,174 @@ async function startServer() {
     res.json({ status: 'ok', app: 'LearnLab', tagline: 'Study. Practice. Excel' });
   });
 
-  // 1. Process Study Notes & Generate Complete Study Ecosystem (File-First Architecture)
+  // 1. Process Study Notes & Generate Complete Study Ecosystem (Multi-Page Unified Topic Architecture)
   app.post('/api/ai/process-notes', async (req, res) => {
     try {
-      const { text, subject, gradeLevel, topic, fileData, mimeType, fileName } = req.body;
+      const { text, subject, gradeLevel, topic, fileData, mimeType, fileName, files } = req.body;
 
-      if (!text && !fileData) {
-        return res.status(400).json({ error: 'Please upload a study document, image, or paste note text.' });
+      // Normalize incoming files into an ordered array (supports both multi-file `files` and legacy single `fileData`)
+      const incomingFiles: Array<{ fileData: string; mimeType?: string; fileName?: string }> =
+        Array.isArray(files) && files.length > 0
+          ? files.filter((f: any) => f && f.fileData)
+          : fileData
+            ? [{ fileData, mimeType, fileName }]
+            : [];
+
+      if (!text && incomingFiles.length === 0) {
+        return res.status(400).json({ error: 'Please upload at least one study document, image, or paste note text.' });
       }
 
-      // 1. Extract content from Word (.docx) or Text (.txt) files if present
-      let docxText = '';
-      let plainTextFromFile = '';
+      // Build ordered multimodal contents array so Gemini reads Page 1 -> Page N in exact sequence
+      const contents: any[] = [];
+      const totalPages = incomingFiles.length;
+      const orderedTextSections: string[] = [];
 
-      if (fileData) {
-        const base64Clean = fileData.replace(/^data:[^;]+;base64,/, '');
-        const lowerName = (fileName || '').toLowerCase();
+      for (let idx = 0; idx < incomingFiles.length; idx++) {
+        const item = incomingFiles[idx];
+        const pageNum = idx + 1;
+        const safeName = item.fileName || `Page ${pageNum}`;
+        const lowerName = safeName.toLowerCase();
+        const itemMime = item.mimeType || '';
+        const base64Clean = item.fileData.replace(/^data:[^;]+;base64,/, '');
 
-        if (lowerName.endsWith('.docx') || mimeType?.includes('wordprocessingml') || mimeType?.includes('officedocument')) {
+        const isDocx =
+          lowerName.endsWith('.docx') ||
+          itemMime.includes('wordprocessingml') ||
+          itemMime.includes('officedocument.wordprocessingml');
+        const isLegacyDoc = lowerName.endsWith('.doc') && !isDocx;
+        const isTxt = lowerName.endsWith('.txt') || itemMime === 'text/plain';
+        const isPdf = lowerName.endsWith('.pdf') || itemMime === 'application/pdf';
+        const isImage =
+          itemMime.startsWith('image/') || /\.(png|jpe?g|webp|heic|heif|bmp|gif)$/i.test(lowerName);
+
+        if (isDocx) {
           try {
             const buffer = Buffer.from(base64Clean, 'base64');
             const result = await mammoth.extractRawText({ buffer });
-            docxText = result.value || '';
+            const extracted = (result.value || '').trim();
+            if (extracted) {
+              const section = `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}) ---\n${extracted}`;
+              orderedTextSections.push(section);
+              contents.push({ text: section });
+            } else {
+              contents.push({ text: `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}): [Empty Word document] ---` });
+            }
           } catch (err: any) {
-            console.warn('[Docx Extract] Error reading word document:', err?.message || err);
+            console.warn(`[Docx Extract] Error reading ${safeName}:`, err?.message || err);
+            contents.push({ text: `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}): [Could not parse Word document] ---` });
           }
-        } else if (lowerName.endsWith('.txt') || mimeType === 'text/plain') {
+        } else if (isLegacyDoc) {
           try {
-            plainTextFromFile = Buffer.from(base64Clean, 'base64').toString('utf-8');
-          } catch (err: any) {
-            console.warn('[Text File Extract] Error reading plain text:', err?.message || err);
+            const buffer = Buffer.from(base64Clean, 'base64');
+            const result = await mammoth.extractRawText({ buffer });
+            const extracted = (result.value || '').trim();
+            if (extracted) {
+              const section = `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}) ---\n${extracted}`;
+              orderedTextSections.push(section);
+              contents.push({ text: section });
+            }
+          } catch {
+            // Fallback: extract printable ASCII segments if binary .doc
+            const rawStr = Buffer.from(base64Clean, 'base64').toString('latin1').replace(/[^\x20-\x7E\r\n]+/g, ' ').replace(/\s{3,}/g, '\n').trim();
+            if (rawStr.length > 30) {
+              const section = `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}) ---\n${rawStr.slice(0, 15000)}`;
+              orderedTextSections.push(section);
+              contents.push({ text: section });
+            }
           }
-        }
-      }
-
-      // 2. Prepare multimodal inputs for Gemini
-      const contents: any[] = [];
-
-      if (fileData) {
-        const lowerName = (fileName || '').toLowerCase();
-        const isPdf = lowerName.endsWith('.pdf') || mimeType === 'application/pdf';
-        const isImage = mimeType?.startsWith('image/') || /\.(png|jpe?g|webp|heic|bmp)$/i.test(lowerName);
-
-        if (isPdf) {
+        } else if (isTxt) {
+          try {
+            const extracted = Buffer.from(base64Clean, 'base64').toString('utf-8').trim();
+            if (extracted) {
+              const section = `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}) ---\n${extracted}`;
+              orderedTextSections.push(section);
+              contents.push({ text: section });
+            }
+          } catch (err: any) {
+            console.warn(`[Text File Extract] Error reading ${safeName}:`, err?.message || err);
+          }
+        } else if (isPdf) {
+          contents.push({ text: `--- PAGE / FILE ${pageNum} OF ${totalPages} (PDF Document: ${safeName}) ---` });
           contents.push({
             inlineData: {
-              data: fileData.replace(/^data:[^;]+;base64,/, ''),
+              data: base64Clean,
               mimeType: 'application/pdf',
             },
           });
         } else if (isImage) {
-          let finalImageMime = mimeType || 'image/jpeg';
+          let finalImageMime = itemMime || 'image/jpeg';
           if (lowerName.endsWith('.png')) finalImageMime = 'image/png';
           else if (lowerName.endsWith('.webp')) finalImageMime = 'image/webp';
+          else if (lowerName.endsWith('.heic')) finalImageMime = 'image/heic';
+          else if (lowerName.endsWith('.heif')) finalImageMime = 'image/heif';
+          else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) finalImageMime = 'image/jpeg';
+
+          contents.push({ text: `--- PAGE / FILE ${pageNum} OF ${totalPages} (Image / Photo Note: ${safeName}) ---` });
           contents.push({
             inlineData: {
-              data: fileData.replace(/^data:[^;]+;base64,/, ''),
+              data: base64Clean,
               mimeType: finalImageMime,
             },
           });
+        } else {
+          // Best-effort text decode for any other text-like upload
+          try {
+            const decoded = Buffer.from(base64Clean, 'base64').toString('utf-8').trim();
+            if (decoded) {
+              const section = `--- PAGE / FILE ${pageNum} OF ${totalPages} (${safeName}) ---\n${decoded.slice(0, 15000)}`;
+              orderedTextSections.push(section);
+              contents.push({ text: section });
+            }
+          } catch {
+            // Skip unreadable binary
+          }
         }
       }
 
-      // Assemble textual material from docx, txt file, and pasted user notes
-      const assembledTextPieces = [
-        docxText ? `Extracted Word Document Content:\n${docxText}` : '',
-        plainTextFromFile ? `Plain Text File Content (${fileName}):\n${plainTextFromFile}` : '',
-        text ? `Student Uploaded Notes / Pasted Text:\n${text}` : '',
-      ].filter(Boolean);
+      if (text && text.trim()) {
+        contents.push({
+          text: `--- ADDITIONAL STUDENT TYPED / PASTED NOTES ---\n${text.trim()}`,
+        });
+      }
 
-      const assembledMaterial = assembledTextPieces.join('\n\n');
-
-      const prompt = `STRICT FILE-FIRST DIRECTIVE:
-1. THE UPLOADED MATERIAL (FILE, IMAGE/OCR, OR NOTE TEXT) IS THE PRIMARY AND CENTRAL SOURCE OF TRUTH.
-2. Every summary, key point, definition, flashcard, quiz question, and study resource MUST be directly derived from the specific facts, terminology, formulas, and concepts present in this uploaded material.
-3. NEVER generate generic placeholder textbook summaries (e.g. general Biology or Mathematics) that disregard the actual text of the file. If the file is about "Cell Division", every resource must focus specifically on the phases, terms, and concepts in that file.
-4. If the document covers MULTIPLE TOPICS, identify and organize each distinct topic into "detectedTopics" and structure the study guide and flashcards to reflect those exact sections.
-5. OPTIONAL USER METADATA: If the student provided optional context (Class, Subject, or Topic), use it strictly as secondary supporting context. The uploaded file ALWAYS overrides user-provided metadata.
-6. NO FABRICATED CONTENT: If the uploaded material is blank, corrupted, totally illegible, or contains no genuine educational content, set "isContentReadable": false and state why in "unreadableReason". DO NOT invent fake educational content.
-
-${assembledMaterial ? `STUDY MATERIAL:\n${assembledMaterial}\n` : 'STUDY MATERIAL: See attached document/image.'}
+      const prompt = `STRICT FILE-FIRST & UNIFIED MULTI-PAGE TOPIC DIRECTIVE:
+1. PRIMARY SOURCE OF TRUTH: Examine ALL ${totalPages > 0 ? totalPages : 1} uploaded page(s)/file(s) and any pasted notes TOGETHER in their exact sequential order (Page 1 through Page ${Math.max(1, totalPages)}) BEFORE generating any study material.
+2. ONE UNIFIED STUDY TOPIC: All uploaded pages in this submission are intended as sequential parts of ONE single study topic (for example: Page 1 = Introduction, Page 2 = Process/Mechanism, Page 3 = Importance/Applications).
+   - Combine all pages in their exact uploaded order into ONE cohesive, complete study material.
+   - NEVER generate separate summaries, separate flashcards, or separate study guides for each page! Synthesize them into one unified resource.
+   - Combine related or overlapping information smoothly across page boundaries without unnecessary repetition.
+   - Avoid treating subheadings or sections of the same overarching topic as separate, unrelated topics.
+   - Preserve all important definitions, explanations, worked examples, formulas, and any diagrams/charts/labeled illustrations shown in images or PDFs (describe labeled diagram components and their relationships clearly in the summary and study guide).
+3. TOPIC CONSISTENCY CHECK (CRITICAL):
+   - Before generating the final study material, evaluate whether all uploaded pages belong to the same overarching topic (including different subheadings or stages of the same topic).
+   - Set "isSingleTopicConsistent": true if the pages belong together under one topic (or if only 1 page/text was provided).
+   - Set "isSingleTopicConsistent": false ONLY if the uploaded pages clearly contain genuinely UNRELATED topics (for example: Page 1 is Biology "Photosynthesis" and Page 2 is Mathematics "Quadratic Equations", or Page 1 is "World War I" and Page 2 is "Organic Chemistry Alkanes").
+   - When "isSingleTopicConsistent" is false:
+     * Explain clearly in "topicConsistencyWarning" which pages appear to cover unrelated topics and recommend uploading one topic at a time for the best unified study material.
+     * List the distinct unrelated topics found in "detectedUnrelatedTopics".
+   - When "isSingleTopicConsistent" is true, set "topicConsistencyWarning" to "" and "detectedUnrelatedTopics" to [].
+   - Put the overarching topic's logical sub-sections/subheadings in "detectedTopics" (e.g. ["Introduction to Photosynthesis", "Light & Dark Reactions", "Importance of Photosynthesis"]).
+4. OPTIONAL USER METADATA: If the student provided optional context (Class, Subject, or Topic), use it strictly as secondary supporting context. The uploaded material ALWAYS overrides user-provided metadata.
+5. NO FABRICATED CONTENT: If the uploaded material is blank, corrupted, totally illegible, or contains no genuine educational content, set "isContentReadable": false and state why in "unreadableReason". DO NOT invent fake educational content.
 
 OPTIONAL STUDENT CONTEXT (Use strictly as secondary context; do NOT override document content):
+- Total Uploaded Pages/Files: ${totalPages}
 - Provided Class / Level: ${gradeLevel || 'Not specified (infer from material)'}
 - Provided Subject: ${subject || 'Not specified (extract from material)'}
 - Provided Topic: ${topic || 'Not specified (extract from material)'}
 
 TASK:
-1. Thoroughly analyze the material.
-2. Extract the primary subject (e.g. Biology, Chemistry, Physics, Mathematics, English, Economics, Government, Literature, etc.) and primary topic.
-3. If multiple topics are covered, identify all in "detectedTopics".
-4. Generate the structured study ecosystem:
-   - Summary: Specific title, comprehensive overview, high-yield key points, important concepts with explanations, precise definitions, and real-world examples.
-   - Flashcards: 6 to 10 questions testing active recall with clear answers and explanations.
-   - Quizzes: 4 to 8 questions (practice & exam-style) with 4 options, correct answer, correctOptionIndex (0-3), and deep explanations.
-   - Markdown Study Guide: Formatted with headers, comparison tables, and structured takeaways.
-   - Glossary: Key domain terms defined in the text.
+1. Read all uploaded pages/files from Page 1 to Page ${Math.max(1, totalPages)} in order.
+2. Perform the Topic Consistency Check first ("isSingleTopicConsistent", "topicConsistencyWarning", "detectedUnrelatedTopics").
+3. Extract the primary subject (e.g. Biology, Chemistry, Physics, Mathematics, English, Economics, Government, Literature, etc.) and unified primary topic ("detectedTopic").
+4. Generate ONE unified, comprehensive study ecosystem covering the entire combined material in proper sequence:
+   - Summary: Specific unified title, comprehensive overview synthesizing all pages in order, high-yield key points, important concepts with explanations (including any diagrams/charts observed), precise definitions, and real-world/worked examples.
+   - Flashcards: 6 to 10 questions testing active recall across ALL uploaded pages with clear answers and explanations.
+   - Quizzes: 4 to 8 questions (practice & exam-style) spanning all uploaded pages with 4 options, correct answer, correctOptionIndex (0-3), and deep explanations.
+   - Markdown Study Guide: Structured sequentially (following Page 1 -> Page N logical flow), with clear section headers, comparison points, diagram breakdowns if applicable, and takeaways.
+   - Glossary: Key domain terms defined across the combined pages.
    - Cheat Sheet: Categorized formulas, rules, or high-yield bullet points.
-   - Revision Checklist: Actionable mastery milestones based on the note's sections.
+   - Revision Checklist: Actionable mastery milestones covering all sections of the combined topic.
 5. MATHEMATICS NOTATION RULE: For all Mathematics questions, options, and explanations, NEVER use the '^' symbol for exponents or powers. Always write out 'raised to the power of' (e.g. '2 raised to the power of 4' or 'x raised to the power of 2' or '10 raised to the power of -3') so novice students can easily understand.`;
 
       contents.push({ text: prompt });
@@ -171,16 +241,18 @@ TASK:
       let parsedData: any = null;
       try {
         const response = await generateContentWithRetry({
-          model: 'gemini-3.1-flash-lite',
-          models: ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.7-flash'],
+          model: 'gemini-4-hydrogen',
+          models: ['gemini-4-hydrogen', 'gemini-3.1-flash-lite', 'gemini-flash-latest'],
           contents,
           config: {
             systemInstruction: `You are LearnLab's File-First Educational AI Engine (Tagline: Study. Practice. Excel).
-Your highest priority is fidelity to the student's actual uploaded material.
-1. The uploaded file is your primary and central source of truth.
-2. Every summary, definition, flashcard, and quiz question must come from the actual document.
-3. Never output generic textbook summaries that ignore the actual file content.
-4. If the file is unreadable, blurred, blank, or contains no usable educational content, you MUST set isContentReadable: false and explain in unreadableReason. Never fabricate study materials.`,
+Your highest priority is fidelity to the student's actual uploaded material across all pages.
+1. Read ALL uploaded pages in exact sequential order (Page 1, Page 2, ...) as parts of ONE complete study topic.
+2. Combine related content seamlessly into ONE unified study material without unnecessary repetition.
+3. Preserve important definitions, explanations, examples, formulas, and visual diagrams/charts.
+4. Do NOT treat subheadings of the same topic as separate topics.
+5. Only flag isSingleTopicConsistent: false when pages genuinely cover unrelated topics, and warn the student recommending one topic at a time.
+6. Never fabricate study materials if pages are blank, blurred, or unreadable.`,
             responseMimeType: 'application/json',
             responseSchema: {
               type: Type.OBJECT,
@@ -193,18 +265,31 @@ Your highest priority is fidelity to the student's actual uploaded material.
                   type: Type.STRING,
                   description: 'Explanation if the content could not be read or contains no study material.',
                 },
+                isSingleTopicConsistent: {
+                  type: Type.BOOLEAN,
+                  description: 'True if all uploaded pages/files belong to one overarching topic (including its subheadings/sub-sections). False ONLY if pages clearly contain genuinely unrelated topics.',
+                },
+                topicConsistencyWarning: {
+                  type: Type.STRING,
+                  description: 'Warning message when isSingleTopicConsistent is false, explaining the unrelated topics detected and recommending uploading one topic at a time. Empty string when consistent.',
+                },
+                detectedUnrelatedTopics: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: 'Distinct unrelated topics detected if isSingleTopicConsistent is false.',
+                },
                 detectedSubject: {
                   type: Type.STRING,
                   description: 'The primary subject extracted directly from the uploaded material.',
                 },
                 detectedTopic: {
                   type: Type.STRING,
-                  description: 'The primary topic extracted directly from the uploaded material.',
+                  description: 'The unified primary topic extracted directly from the combined uploaded material.',
                 },
                 detectedTopics: {
                   type: Type.ARRAY,
                   items: { type: Type.STRING },
-                  description: 'All distinct topics or chapters covered in the document if multi-topic.',
+                  description: 'Logical sub-sections or subheadings covered within this unified study topic.',
                 },
                 summary: {
                   type: Type.OBJECT,
@@ -330,6 +415,7 @@ Your highest priority is fidelity to the student's actual uploaded material.
               },
               required: [
                 'isContentReadable',
+                'isSingleTopicConsistent',
                 'detectedSubject',
                 'detectedTopic',
                 'summary',
@@ -347,10 +433,9 @@ Your highest priority is fidelity to the student's actual uploaded material.
         parsedData = JSON.parse(response.text || '{}');
       } catch (genErr: any) {
         console.error('[Process Notes] AI generation error:', genErr?.message || genErr);
-        // Rule: NO FABRICATED SUMMARY. If processing fails, report clearly so student can retry or paste text.
         return res.status(422).json({
           success: false,
-          error: 'We could not extract readable study content from this document. Please ensure the file contains legible text or photos, or paste your notes directly.',
+          error: 'We could not extract readable study content from the uploaded page(s). Please ensure the files contain legible text or clear photos, or paste your notes directly.',
           details: genErr?.message,
         });
       }
@@ -359,7 +444,7 @@ Your highest priority is fidelity to the student's actual uploaded material.
       if (parsedData.isContentReadable === false) {
         return res.status(422).json({
           success: false,
-          error: parsedData.unreadableReason || 'The uploaded file could not be read or contains insufficient readable study content. Please upload a clear document, photo, or paste your notes directly.',
+          error: parsedData.unreadableReason || 'The uploaded file(s) could not be read or contain insufficient readable study content. Please upload clear documents, photos, or paste your notes directly.',
         });
       }
 
@@ -392,11 +477,14 @@ Your highest priority is fidelity to the student's actual uploaded material.
         detectedSubject: parsedData.detectedSubject,
         detectedTopic: parsedData.detectedTopic,
         detectedTopics: parsedData.detectedTopics,
+        isSingleTopicConsistent: parsedData.isSingleTopicConsistent !== false,
+        topicConsistencyWarning: parsedData.topicConsistencyWarning || '',
+        detectedUnrelatedTopics: parsedData.detectedUnrelatedTopics || [],
       });
     } catch (err: any) {
       console.error('Error processing notes with AI:', err);
       return res.status(500).json({
-        error: 'We encountered an issue processing this document. Please try again with clear text or images.',
+        error: 'We encountered an issue processing these study materials. Please try again with clear text or images.',
         details: err.message,
       });
     }

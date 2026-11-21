@@ -65,6 +65,16 @@ export interface QuizQuestion {
   sourceLabel?: string; // e.g. "WAEC 2023 Q14" or "JAMB 2024"
 }
 
+export interface UploadedStudyFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  base64: string;
+  textPreview?: string;
+  source: 'file' | 'camera';
+}
+
 export interface StudyResource {
   summary: {
     title: string;
@@ -85,6 +95,9 @@ export interface StudyResource {
   detectedSubject?: string;
   detectedTopic?: string;
   detectedTopics?: string[];
+  isSingleTopicConsistent?: boolean;
+  topicConsistencyWarning?: string;
+  detectedUnrelatedTopics?: string[];
   revisionChecklist: { task: string; completed: boolean }[];
 }
 

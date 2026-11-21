@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   BookOpen,
   UploadCloud,
@@ -18,9 +18,16 @@ import {
   Check,
   ChevronRight,
   ArrowLeft,
+  ArrowRight,
   AlertCircle,
+  AlertTriangle,
   Search,
   Plus,
+  Camera,
+  X,
+  Eye,
+  GripVertical,
+  RefreshCw,
 } from 'lucide-react';
 import {
   StudyNote,
@@ -29,6 +36,7 @@ import {
   QuizQuestion,
   QuizResult,
   StudyResource,
+  UploadedStudyFile,
 } from '../../types';
 import { SUBJECTS_BY_LEVEL } from '../../data/curriculumData';
 import { addMistakeItem, saveStoredQuizResult } from '../../utils/storage';
@@ -64,11 +72,28 @@ export const StudyMode: React.FC<StudyModeProps> = ({
   const [newGradeLevel, setNewGradeLevel] = useState('');
   const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [pastedText, setPastedText] = useState('');
-  const [selectedFile, setSelectedFile] = useState<{
-    name: string;
-    type: string;
-    base64: string;
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedStudyFile[]>([]);
+  const [isDraggingOverDropzone, setIsDraggingOverDropzone] = useState(false);
+  const [draggedPageIndex, setDraggedPageIndex] = useState<number | null>(null);
+  const [dragOverPageIndex, setDragOverPageIndex] = useState<number | null>(null);
+  const [previewFileModal, setPreviewFileModal] = useState<UploadedStudyFile | null>(null);
+  const [showTopicReminderModal, setShowTopicReminderModal] = useState(false);
+  const [pendingConsistencyWarning, setPendingConsistencyWarning] = useState<{
+    note: StudyNote;
+    warning: string;
+    unrelatedTopics: string[];
   } | null>(null);
+
+  // Camera Capture Modal State for Multi-Page Scanning
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [capturedPhotoPreview, setCapturedPhotoPreview] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const multiFileInputRef = useRef<HTMLInputElement | null>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -103,46 +128,304 @@ export const StudyMode: React.FC<StudyModeProps> = ({
 
   const currentNote = notes.find((n) => n.id === selectedNoteId);
 
-  // File Upload Handler (PDF, Images, DOCX, Text)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 25 * 1024 * 1024) {
-      setErrorMessage('File size exceeds 25MB limit. Please upload a smaller file.');
-      return;
+  // Attach active camera stream to <video> whenever stream or modal state updates
+  useEffect(() => {
+    if (isCameraModalOpen && cameraStream && !capturedPhotoPreview && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
     }
+  }, [isCameraModalOpen, cameraStream, capturedPhotoPreview]);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setSelectedFile({
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        base64: base64,
-      });
-      if (!newTitle) {
-        setNewTitle(file.name.replace(/\.[^/.]+$/, ''));
+  // Ensure camera stream stops cleanly on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
       }
     };
-    reader.readAsDataURL(file);
+  }, [cameraStream]);
 
-    // If it's a plain text file, also preview it into pastedText if empty
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-      const textReader = new FileReader();
-      textReader.onload = () => {
-        if (typeof textReader.result === 'string' && !pastedText) {
-          setPastedText(textReader.result);
+  // Helper: Optimize large images while preserving crisp handwriting/OCR readability
+  const readFileAsStudyPage = (
+    file: File,
+    source: 'file' | 'camera' = 'file'
+  ): Promise<UploadedStudyFile> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+
+      reader.onload = async () => {
+        const rawBase64 = reader.result as string;
+        const lowerName = file.name.toLowerCase();
+        const isImage =
+          file.type.startsWith('image/') ||
+          /\.(png|jpe?g|webp|bmp|gif)$/i.test(lowerName);
+
+        let finalBase64 = rawBase64;
+        let finalType = file.type || 'application/octet-stream';
+
+        // Compress very large images (> 1.5MB) gently so multi-page uploads stay fast & crisp
+        if (isImage && file.size > 1.5 * 1024 * 1024) {
+          try {
+            const optimized = await new Promise<string>((imgResolve, imgReject) => {
+              const img = new Image();
+              img.onload = () => {
+                const maxDim = 1800;
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                  if (width >= height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                  } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                  }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                  imgReject(new Error('Canvas context unavailable'));
+                  return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+                imgResolve(canvas.toDataURL('image/jpeg', 0.86));
+              };
+              img.onerror = () => imgReject(new Error('Image decode skipped'));
+              img.src = rawBase64;
+            });
+            finalBase64 = optimized;
+            finalType = 'image/jpeg';
+          } catch {
+            // Fall back to original rawBase64 if browser cannot decode (e.g. HEIC)
+          }
         }
+
+        // Read text preview for .txt files
+        let textPreview: string | undefined;
+        if (file.type === 'text/plain' || lowerName.endsWith('.txt')) {
+          try {
+            textPreview = await file.text();
+          } catch {
+            textPreview = undefined;
+          }
+        }
+
+        resolve({
+          id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name,
+          type: finalType,
+          size: file.size,
+          base64: finalBase64,
+          textPreview: textPreview ? textPreview.slice(0, 220) : undefined,
+          source,
+        });
       };
-      textReader.readAsText(file);
+
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Multi-File Upload Handler (PDF, Images, Camera Gallery, DOCX, DOC, TXT)
+  const handleFilesAdded = async (
+    fileList: FileList | File[] | null,
+    source: 'file' | 'camera' = 'file'
+  ) => {
+    if (!fileList || fileList.length === 0) return;
+
+    const filesArray = Array.from(fileList);
+    const oversizedFiles: string[] = [];
+    const validFiles: File[] = [];
+
+    for (const file of filesArray) {
+      if (file.size > 25 * 1024 * 1024) {
+        oversizedFiles.push(file.name);
+      } else {
+        validFiles.push(file);
+      }
+    }
+
+    if (oversizedFiles.length > 0) {
+      setErrorMessage(
+        `Some file(s) exceed the 25MB limit and were skipped: ${oversizedFiles.join(', ')}`
+      );
+    } else {
+      setErrorMessage(null);
+    }
+
+    if (validFiles.length === 0) return;
+
+    try {
+      const processedPages = await Promise.all(
+        validFiles.map((file) => readFileAsStudyPage(file, source))
+      );
+
+      setUploadedFiles((prev) => {
+        const next = [...prev, ...processedPages];
+        return next;
+      });
+    } catch (err: any) {
+      console.error('Error reading uploaded files:', err);
+      setErrorMessage(err?.message || 'Could not read one or more selected files.');
     }
   };
 
-  // Submit Note for AI Processing (File-First Architecture)
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await handleFilesAdded(e.target.files, 'file');
+    e.target.value = '';
+  };
+
+  const handleNativeCameraChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await handleFilesAdded(e.target.files, 'camera');
+    e.target.value = '';
+  };
+
+  // Camera Scanner Controls
+  const stopCameraStream = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+  };
+
+  const startStudyCamera = async (facing: 'environment' | 'user' = cameraFacing) => {
+    setCameraError(null);
+    setCapturedPhotoPreview(null);
+    setIsCameraModalOpen(true);
+
+    try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera API is not supported in this browser.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1600 }, height: { ideal: 1200 } },
+        audio: false,
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (err: any) {
+      console.error('Study camera access error:', err);
+      setCameraError(
+        'Could not open live camera preview. Please allow camera permissions or use the "Take Photo with Device Camera" button below.'
+      );
+    }
+  };
+
+  const closeCameraModal = () => {
+    stopCameraStream();
+    setCapturedPhotoPreview(null);
+    setCameraError(null);
+    setIsCameraModalOpen(false);
+  };
+
+  const snapStudyPagePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 960;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      setCapturedPhotoPreview(dataUrl);
+      stopCameraStream();
+    }
+  };
+
+  const saveCapturedPhotoPage = (andSnapAnother: boolean) => {
+    if (!capturedPhotoPreview) return;
+    const approxBytes = Math.round((capturedPhotoPreview.length * 3) / 4);
+    const nextNumber = uploadedFiles.length + 1;
+    const newPage: UploadedStudyFile = {
+      id: `cam-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: `Captured Page ${nextNumber}.jpg`,
+      type: 'image/jpeg',
+      size: approxBytes,
+      base64: capturedPhotoPreview,
+      source: 'camera',
+    };
+    setUploadedFiles((prev) => [...prev, newPage]);
+    setErrorMessage(null);
+
+    if (andSnapAnother) {
+      setCapturedPhotoPreview(null);
+      startStudyCamera(cameraFacing);
+    } else {
+      closeCameraModal();
+    }
+  };
+
+  // Reorder & Remove Uploaded Pages
+  const moveUploadedPage = (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= uploadedFiles.length) return;
+    setUploadedFiles((prev) => {
+      const copy = [...prev];
+      const [moved] = copy.splice(index, 1);
+      copy.splice(targetIndex, 0, moved);
+      return copy;
+    });
+  };
+
+  const removeUploadedPage = (id: string) => {
+    setUploadedFiles((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const handlePageDragStart = (index: number) => {
+    setDraggedPageIndex(index);
+  };
+
+  const handlePageDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (dragOverPageIndex !== index) {
+      setDragOverPageIndex(index);
+    }
+  };
+
+  const handlePageDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedPageIndex === null || draggedPageIndex === targetIndex) {
+      setDraggedPageIndex(null);
+      setDragOverPageIndex(null);
+      return;
+    }
+    setUploadedFiles((prev) => {
+      const copy = [...prev];
+      const [moved] = copy.splice(draggedPageIndex, 1);
+      copy.splice(targetIndex, 0, moved);
+      return copy;
+    });
+    setDraggedPageIndex(null);
+    setDragOverPageIndex(null);
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Step 1 CTA: Validate & Show "One Topic at a Time!" Confirmation Popup
+  const handleContinueClick = () => {
+    if (!pastedText.trim() && uploadedFiles.length === 0) {
+      setErrorMessage(
+        'Please upload at least one study document, photo, or paste note text to continue.'
+      );
+      return;
+    }
+    setErrorMessage(null);
+    setShowTopicReminderModal(true);
+  };
+
+  // Submit Note(s) for AI Processing (Multi-Page Unified Topic Architecture)
   const handleProcessNote = async () => {
-    // Subject, Class, and Topic are strictly OPTIONAL. Uploaded file or pasted text is the primary requirement.
-    if (!pastedText.trim() && !selectedFile) {
+    if (!pastedText.trim() && uploadedFiles.length === 0) {
       setErrorMessage('Please upload a study document, image, or paste note text to summarize.');
       return;
     }
@@ -156,13 +439,12 @@ export const StudyMode: React.FC<StudyModeProps> = ({
         subject: newSubject.trim() || undefined,
         gradeLevel: newGradeLevel.trim() || profile.grade || undefined,
         topic: newTopic.trim() || undefined,
+        files: uploadedFiles.map((f) => ({
+          fileData: f.base64,
+          mimeType: f.type,
+          fileName: f.name,
+        })),
       };
-
-      if (selectedFile) {
-        payload.fileData = selectedFile.base64;
-        payload.mimeType = selectedFile.type;
-        payload.fileName = selectedFile.name;
-      }
 
       const response = await fetch('/api/ai/process-notes', {
         method: 'POST',
@@ -177,9 +459,30 @@ export const StudyMode: React.FC<StudyModeProps> = ({
       }
 
       // Extract subject, topic, and title from AI detection if not manually provided
-      const finalSubject = newSubject.trim() || data.detectedSubject || data.resources?.detectedSubject || profile.subjects[0] || 'General';
-      const finalTopic = newTopic.trim() || data.detectedTopic || data.resources?.detectedTopic || 'Study Topic';
-      const finalTitle = newTitle.trim() || data.resources?.summary?.title || (selectedFile ? selectedFile.name.replace(/\.[^/.]+$/, '') : `${finalSubject}: ${finalTopic}`);
+      const finalSubject =
+        newSubject.trim() ||
+        data.detectedSubject ||
+        data.resources?.detectedSubject ||
+        profile.subjects[0] ||
+        'General';
+      const finalTopic =
+        newTopic.trim() ||
+        data.detectedTopic ||
+        data.resources?.detectedTopic ||
+        'Study Topic';
+      const finalTitle =
+        newTitle.trim() ||
+        data.resources?.summary?.title ||
+        (uploadedFiles.length === 1
+          ? uploadedFiles[0].name.replace(/\.[^/.]+$/, '')
+          : `${finalSubject}: ${finalTopic}`);
+
+      const enrichedResources: StudyResource = {
+        ...data.resources,
+        isSingleTopicConsistent: data.isSingleTopicConsistent !== false,
+        topicConsistencyWarning: data.topicConsistencyWarning || '',
+        detectedUnrelatedTopics: data.detectedUnrelatedTopics || [],
+      };
 
       const newNote: StudyNote = {
         id: `note-${Date.now()}`,
@@ -190,13 +493,36 @@ export const StudyMode: React.FC<StudyModeProps> = ({
         educationLevel: profile.educationLevel,
         topic: finalTopic,
         detectedTopics: data.detectedTopics || data.resources?.detectedTopics,
-        sourceFileType: selectedFile ? (selectedFile.name.split('.').pop()?.toUpperCase() || 'FILE') : 'TEXT',
-        rawText: pastedText || `Processed from file: ${selectedFile?.name}`,
-        fileNames: selectedFile ? [selectedFile.name] : undefined,
+        sourceFileType:
+          uploadedFiles.length > 1
+            ? `${uploadedFiles.length} PAGES`
+            : uploadedFiles.length === 1
+              ? uploadedFiles[0].name.split('.').pop()?.toUpperCase() || 'FILE'
+              : 'TEXT',
+        rawText:
+          pastedText ||
+          (uploadedFiles.length > 0
+            ? `Processed from ${uploadedFiles.length} file(s): ${uploadedFiles
+                .map((f, idx) => `Page ${idx + 1}: ${f.name}`)
+                .join(', ')}`
+            : ''),
+        fileNames: uploadedFiles.length > 0 ? uploadedFiles.map((f) => f.name) : undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        resources: data.resources,
+        resources: enrichedResources,
       };
+
+      // If AI detected unrelated topics across uploaded pages, warn the user before finalizing
+      if (data.isSingleTopicConsistent === false && data.topicConsistencyWarning) {
+        setPendingConsistencyWarning({
+          note: newNote,
+          warning: data.topicConsistencyWarning,
+          unrelatedTopics: Array.isArray(data.detectedUnrelatedTopics)
+            ? data.detectedUnrelatedTopics
+            : [],
+        });
+        return;
+      }
 
       const updated = [newNote, ...notes];
       onSaveNotes(updated);
@@ -205,7 +531,10 @@ export const StudyMode: React.FC<StudyModeProps> = ({
       resetNewForm();
     } catch (err: any) {
       console.error('Error in handleProcessNote:', err);
-      setErrorMessage(err.message || 'We could not process this document. Please ensure the file contains legible text or photos, or paste your notes directly.');
+      setErrorMessage(
+        err.message ||
+          'We could not process these study materials. Please ensure the files contain legible text or clear photos, or paste your notes directly.'
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -218,8 +547,12 @@ export const StudyMode: React.FC<StudyModeProps> = ({
     setNewGradeLevel('');
     setShowOptionalFields(false);
     setPastedText('');
-    setSelectedFile(null);
+    setUploadedFiles([]);
+    setShowTopicReminderModal(false);
+    setPendingConsistencyWarning(null);
+    setPreviewFileModal(null);
     setErrorMessage(null);
+    closeCameraModal();
   };
 
   // Audio Study Mode: Read summary aloud using SpeechSynthesis
@@ -432,21 +765,21 @@ export const StudyMode: React.FC<StudyModeProps> = ({
         </button>
       </div>
 
-      {/* NEW NOTE CREATION & OCR UPLOAD MODAL/PANEL (FILE-FIRST ARCHITECTURE) */}
+      {/* NEW NOTE CREATION & MULTI-PAGE UPLOAD PANEL (FILE-FIRST ARCHITECTURE) */}
       {isCreatingNew && (
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-indigo-200 shadow-xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
           <div className="border-b border-slate-100 pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-indigo-600" />
                 <span>File-First Note Summarizer & Study Generator</span>
               </h2>
-              <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold whitespace-nowrap">
                 Document-Driven AI
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Upload your actual notes, PDF slides, Word documents, textbook scans, or photos. LearnLab analyzes the real document contents to generate precise summaries, flashcards, quizzes, and study guides.
+              Upload or capture multiple pages of your notes, PDF slides, Word documents, textbook scans, or gallery photos for one topic. LearnLab combines all pages in order to generate unified summaries, flashcards, quizzes, and study guides.
             </p>
           </div>
 
@@ -460,60 +793,99 @@ export const StudyMode: React.FC<StudyModeProps> = ({
             </div>
           )}
 
-          {/* PRIMARY STEP: Upload Material or Paste Notes (Central Source of Truth) */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
+          {/* Hidden Multi-File & Native Camera Inputs */}
+          <input
+            ref={multiFileInputRef}
+            id="note-file-upload-input"
+            type="file"
+            multiple
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.doc,.docx,.txt"
+            onChange={handleFileInputChange}
+            className="hidden"
+          />
+          <input
+            ref={nativeCameraInputRef}
+            id="note-native-camera-input"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={handleNativeCameraChange}
+            className="hidden"
+          />
+
+          {/* PRIMARY STEP: Upload Multiple Pages/Files or Paste Notes */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <UploadCloud className="w-4 h-4 text-indigo-600" />
-                Step 1: Upload Study Material (Primary Source)
+                Step 1: Upload or Capture Study Pages (One Topic)
               </span>
               <span className="text-[11px] text-slate-400 font-medium">
-                Supports PDF, DOCX, Images, Scans & Text
+                Supports Multiple Images, Camera Captures, PDF, DOCX, DOC & TXT
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* File Drag & Drop / Selection */}
-              <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all flex flex-col items-center justify-center relative ${
-                selectedFile
-                  ? 'border-emerald-400 bg-emerald-50/30'
-                  : 'border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/20'
-              }`}>
-                <input
-                  id="note-file-upload-input"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.txt"
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              {/* Multi-File Dropzone + Camera Action */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDraggingOverDropzone(true);
+                }}
+                onDragLeave={() => setIsDraggingOverDropzone(false)}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setIsDraggingOverDropzone(false);
+                  await handleFilesAdded(e.dataTransfer.files, 'file');
+                }}
+                className={`border-2 border-dashed rounded-2xl p-5 text-center transition-all flex flex-col items-center justify-center ${
+                  isDraggingOverDropzone
+                    ? 'border-indigo-600 bg-indigo-50/50 scale-[1.01]'
+                    : uploadedFiles.length > 0
+                      ? 'border-emerald-400 bg-emerald-50/20'
+                      : 'border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/20'
+                }`}
+              >
+                <UploadCloud
+                  className={`w-9 h-9 mb-2 ${
+                    uploadedFiles.length > 0 ? 'text-emerald-600' : 'text-indigo-500'
+                  }`}
                 />
-                <UploadCloud className={`w-10 h-10 mb-2 ${selectedFile ? 'text-emerald-600' : 'text-indigo-500'}`} />
                 <p className="text-xs font-bold text-slate-800">
-                  {selectedFile ? selectedFile.name : 'Upload PDF, Word doc (.docx), Photo or Handwritten Notes'}
+                  {uploadedFiles.length > 0
+                    ? `${uploadedFiles.length} ${
+                        uploadedFiles.length === 1 ? 'Page / File' : 'Pages / Files'
+                      } Selected`
+                    : 'Upload PDF, Word (.docx), Photos or Handwritten Notes'}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Supports OCR for handwritten student notes & lecture camera captures (up to 25MB).
+                <p className="text-[11px] text-slate-500 mt-1 max-w-xs">
+                  Select multiple photos/pages at once or capture pages one by one. Max 25MB per file.
                 </p>
-                {selectedFile ? (
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      ✓ Ready: {selectedFile.name}
+
+                <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    id="browse-multi-files-btn"
+                    type="button"
+                    onClick={() => multiFileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold shadow-xs transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>
+                      {uploadedFiles.length > 0 ? 'Add More Files' : 'Select Files / Photos'}
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedFile(null);
-                      }}
-                      className="text-[10px] text-rose-600 hover:underline font-semibold"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <span className="mt-2.5 px-3 py-1 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-semibold">
-                    Browse or drag file here
-                  </span>
-                )}
+                  </button>
+
+                  <button
+                    id="open-study-camera-btn"
+                    type="button"
+                    onClick={() => startStudyCamera('environment')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold shadow-xs transition-all"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Capture with Camera</span>
+                  </button>
+                </div>
               </div>
 
               {/* Paste Plain Text Area */}
@@ -523,11 +895,210 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                   rows={5}
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
-                  placeholder="Or paste text directly from lecture slides, syllabus, or typed school notes here..."
+                  placeholder="Or paste text directly from lecture slides, syllabus, or typed school notes here (optional if files are uploaded)..."
                   className="w-full h-full p-3.5 rounded-2xl border border-slate-300 text-xs font-medium text-slate-800 outline-hidden focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 resize-none"
                 ></textarea>
               </div>
             </div>
+
+            {/* UPLOADED PAGES / FILES PREVIEW & REORDER QUEUE */}
+            {uploadedFiles.length > 0 && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 animate-in fade-in duration-150">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-bold">
+                      {uploadedFiles.length}{' '}
+                      {uploadedFiles.length === 1 ? 'Page Uploaded' : 'Pages Uploaded'}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-700">
+                      Combined in order into 1 study topic
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      id="add-more-files-queue-btn"
+                      onClick={() => multiFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 text-[11px] font-bold text-slate-700 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Add More Pages</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="add-camera-page-queue-btn"
+                      onClick={() => startStudyCamera('environment')}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-indigo-400 text-[11px] font-bold text-slate-700 transition-colors"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Snap Page</span>
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  Preview your pages below. Drag cards or use the arrows to arrange pages in the exact reading order (Page 1 to Page {uploadedFiles.length}).
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {uploadedFiles.map((fileItem, index) => {
+                    const isImage =
+                      fileItem.type.startsWith('image/') ||
+                      /\.(png|jpe?g|webp|heic|heif|bmp|gif)$/i.test(fileItem.name);
+                    const isPdf =
+                      fileItem.type === 'application/pdf' ||
+                      fileItem.name.toLowerCase().endsWith('.pdf');
+                    const isDragTarget =
+                      dragOverPageIndex === index && draggedPageIndex !== index;
+
+                    return (
+                      <div
+                        key={fileItem.id}
+                        draggable
+                        onDragStart={() => handlePageDragStart(index)}
+                        onDragOver={(e) => handlePageDragOver(e, index)}
+                        onDragLeave={() => setDragOverPageIndex(null)}
+                        onDrop={(e) => handlePageDrop(e, index)}
+                        onDragEnd={() => {
+                          setDraggedPageIndex(null);
+                          setDragOverPageIndex(null);
+                        }}
+                        className={`group relative rounded-2xl bg-white border p-3 transition-all flex flex-col gap-2.5 ${
+                          isDragTarget
+                            ? 'border-indigo-500 ring-2 ring-indigo-200 scale-[1.01]'
+                            : draggedPageIndex === index
+                              ? 'opacity-60 border-indigo-300'
+                              : 'border-slate-200 hover:border-indigo-300 shadow-2xs'
+                        }`}
+                      >
+                        {/* Top row: Page Order Badge + Drag Handle + Remove */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical
+                              className="w-3.5 h-3.5 text-slate-400 cursor-grab active:cursor-grabbing"
+                              aria-hidden="true"
+                            />
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] font-extrabold">
+                              Page {index + 1}
+                            </span>
+                            {fileItem.source === 'camera' && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                                Camera
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeUploadedPage(fileItem.id)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title={`Remove Page ${index + 1}`}
+                            aria-label={`Remove ${fileItem.name}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Preview Thumbnail / Document Card */}
+                        {isImage ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewFileModal(fileItem)}
+                            className="relative w-full h-32 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 group/thumb text-left"
+                            title="Click to inspect full page"
+                          >
+                            <img
+                              src={fileItem.base64}
+                              alt={`Page ${index + 1}: ${fileItem.name}`}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-slate-900/0 group-hover/thumb:bg-slate-900/35 transition-colors flex items-center justify-center">
+                              <span className="opacity-0 group-hover/thumb:opacity-100 transition-opacity px-2.5 py-1 rounded-lg bg-white/95 text-slate-900 text-[10px] font-bold flex items-center gap-1 shadow-sm">
+                                <Eye className="w-3 h-3" />
+                                Preview
+                              </span>
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="w-full h-32 rounded-xl bg-slate-50 border border-slate-200/80 p-3 flex flex-col justify-between">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                  isPdf
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                }`}
+                              >
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="inline-block px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 text-[9px] font-bold uppercase">
+                                  {fileItem.name.split('.').pop() || 'DOC'}
+                                </span>
+                                <p className="text-[11px] font-bold text-slate-800 truncate mt-0.5">
+                                  {fileItem.name}
+                                </p>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-snug">
+                              {fileItem.textPreview
+                                ? fileItem.textPreview
+                                : isPdf
+                                  ? 'PDF document ready for full multi-page analysis'
+                                  : 'Study document ready for extraction'}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Filename + Reorder Buttons */}
+                        <div className="flex items-center justify-between gap-2 pt-0.5">
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold text-slate-800 truncate">
+                              {fileItem.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {formatFileSize(fileItem.size)}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => moveUploadedPage(index, -1)}
+                              className={`p-1.5 rounded-lg border text-xs transition-colors ${
+                                index === 0
+                                  ? 'border-slate-100 text-slate-300 cursor-not-allowed'
+                                  : 'border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200'
+                              }`}
+                              title="Move Earlier"
+                              aria-label={`Move ${fileItem.name} earlier`}
+                            >
+                              <ArrowLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === uploadedFiles.length - 1}
+                              onClick={() => moveUploadedPage(index, 1)}
+                              className={`p-1.5 rounded-lg border text-xs transition-colors ${
+                                index === uploadedFiles.length - 1
+                                  ? 'border-slate-100 text-slate-300 cursor-not-allowed'
+                                  : 'border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200'
+                              }`}
+                              title="Move Later"
+                              aria-label={`Move ${fileItem.name} later`}
+                            >
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* SECONDARY / OPTIONAL STEP: Optional information (Class, Subject, Topic) */}
@@ -617,12 +1188,16 @@ export const StudyMode: React.FC<StudyModeProps> = ({
           </div>
 
           {/* Processing CTA */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              LearnLab generates summary, flashcards, quizzes & study guides strictly from your uploaded material.
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+            <p className="text-[11px] text-slate-400">
+              {uploadedFiles.length > 0
+                ? `${uploadedFiles.length} ${
+                    uploadedFiles.length === 1 ? 'file/page' : 'files/pages'
+                  } queued to combine into one complete study material.`
+                : 'LearnLab generates summary, flashcards, quizzes & study guides strictly from your uploaded material.'}
             </p>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-end gap-3">
               <button
                 id="cancel-new-note-btn"
                 type="button"
@@ -639,7 +1214,7 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                 id="submit-process-notes-btn"
                 type="button"
                 disabled={isProcessing}
-                onClick={handleProcessNote}
+                onClick={handleContinueClick}
                 className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md ${
                   isProcessing
                     ? 'bg-indigo-400 cursor-not-allowed'
@@ -649,12 +1224,12 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                 {isProcessing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Analyzing File & Generating Resources...</span>
+                    <span>Combining & Analyzing Pages...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    <span>✨ Summarize My Notes</span>
+                    <span>Continue</span>
+                    <ChevronRight className="w-4 h-4" />
                   </>
                 )}
               </button>
@@ -754,9 +1329,16 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                         {currentNote.gradeLevel} • {currentNote.topic}
                       </span>
                       {currentNote.fileNames && currentNote.fileNames.length > 0 && (
-                        <span className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 text-[10px] font-medium flex items-center gap-1">
+                        <span
+                          className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 text-[10px] font-medium flex items-center gap-1"
+                          title={currentNote.fileNames.join(' → ')}
+                        >
                           <FileText className="w-3 h-3 text-slate-500" />
-                          <span>File: {currentNote.fileNames[0]}</span>
+                          <span>
+                            {currentNote.fileNames.length === 1
+                              ? `File: ${currentNote.fileNames[0]}`
+                              : `${currentNote.fileNames.length} Pages Combined`}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -773,6 +1355,16 @@ export const StudyMode: React.FC<StudyModeProps> = ({
                         ))}
                       </div>
                     )}
+                    {currentNote.resources?.isSingleTopicConsistent === false &&
+                      currentNote.resources?.topicConsistencyWarning && (
+                        <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold">Topic Consistency Notice: </span>
+                            <span>{currentNote.resources.topicConsistencyWarning}</span>
+                          </div>
+                        </div>
+                      )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1464,6 +2056,313 @@ export const StudyMode: React.FC<StudyModeProps> = ({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 1. IMPORTANT TOPIC REMINDER POPUP ("One Topic at a Time!") */}
+      {showTopicReminderModal && (
+        <div
+          id="topic-reminder-modal"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  One Topic at a Time!
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Please ensure that the uploaded file(s) contain only ONE topic. If your topic covers multiple pages, you can upload all those pages together. LearnLab will combine them into one complete study material.
+                </p>
+              </div>
+            </div>
+
+            {uploadedFiles.length > 0 && (
+              <div className="px-3.5 py-2.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-indigo-900">
+                  Ready to combine into 1 topic:
+                </span>
+                <span className="font-extrabold text-indigo-700">
+                  {uploadedFiles.length} {uploadedFiles.length === 1 ? 'Page / File' : 'Pages / Files'}
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                id="topic-reminder-go-back-btn"
+                type="button"
+                onClick={() => setShowTopicReminderModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                id="topic-reminder-continue-btn"
+                type="button"
+                onClick={() => {
+                  setShowTopicReminderModal(false);
+                  handleProcessNote();
+                }}
+                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. AI UNRELATED TOPICS WARNING MODAL */}
+      {pendingConsistencyWarning && (
+        <div
+          id="unrelated-topics-warning-modal"
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-amber-200 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  Unrelated Topics Detected
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {pendingConsistencyWarning.warning}
+                </p>
+              </div>
+            </div>
+
+            {pendingConsistencyWarning.unrelatedTopics.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                  Separate Topics Detected Across Pages:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {pendingConsistencyWarning.unrelatedTopics.map((topicName, i) => (
+                    <span
+                      key={i}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-amber-900 text-[11px] font-bold"
+                    >
+                      {topicName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-500">
+              For the clearest summaries, flashcards, and quizzes, we recommend going back and keeping only pages from one topic at a time.
+            </p>
+
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-2.5 pt-1">
+              <button
+                id="consistency-edit-pages-btn"
+                type="button"
+                onClick={() => setPendingConsistencyWarning(null)}
+                className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+              >
+                Go Back & Edit Pages
+              </button>
+              <button
+                id="consistency-save-anyway-btn"
+                type="button"
+                onClick={() => {
+                  const noteToSave = pendingConsistencyWarning.note;
+                  const updated = [noteToSave, ...notes];
+                  onSaveNotes(updated);
+                  setSelectedNoteId(noteToSave.id);
+                  setIsCreatingNew(false);
+                  resetNewForm();
+                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+              >
+                Keep Combined Study Material Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. MULTI-PAGE CAMERA CAPTURE MODAL */}
+      {isCameraModalOpen && (
+        <div
+          id="study-camera-modal"
+          className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-indigo-600" />
+                  <span>Capture Note Pages</span>
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {uploadedFiles.length > 0
+                    ? `${uploadedFiles.length} page(s) added so far`
+                    : 'Snap handwritten or printed pages in order'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCameraModal}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Close camera"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {cameraError && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-2">
+                  <p>{cameraError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeCameraModal();
+                      nativeCameraInputRef.current?.click();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold"
+                  >
+                    Take Photo with Device Camera
+                  </button>
+                </div>
+              )}
+
+              <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-[4/3] w-full flex items-center justify-center">
+                {capturedPhotoPreview ? (
+                  <img
+                    src={capturedPhotoPreview}
+                    alt="Captured note page preview"
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                {capturedPhotoPreview ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCapturedPhotoPreview(null);
+                        startStudyCamera(cameraFacing);
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition-colors"
+                    >
+                      Retake
+                    </button>
+                    <button
+                      id="camera-add-snap-next-btn"
+                      type="button"
+                      onClick={() => saveCapturedPhotoPage(true)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all"
+                    >
+                      Add & Snap Next Page
+                    </button>
+                    <button
+                      id="camera-add-done-btn"
+                      type="button"
+                      onClick={() => saveCapturedPhotoPage(false)}
+                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
+                    >
+                      Add & Done
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={closeCameraModal}
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextFacing =
+                          cameraFacing === 'environment' ? 'user' : 'environment';
+                        setCameraFacing(nextFacing);
+                        startStudyCamera(nextFacing);
+                      }}
+                      className="p-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                      title="Switch Camera"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                    <button
+                      id="study-camera-snap-btn"
+                      type="button"
+                      disabled={!cameraStream}
+                      onClick={snapStudyPagePhoto}
+                      className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 transition-all ${
+                        cameraStream
+                          ? 'bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/20'
+                          : 'bg-slate-300 cursor-not-allowed'
+                      }`}
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Snap Page</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. FULL-PAGE IMAGE PREVIEW LIGHTBOX MODAL */}
+      {previewFileModal && (
+        <div
+          id="page-preview-lightbox-modal"
+          onClick={() => setPreviewFileModal(null)}
+          className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200"
+          >
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+              <div className="min-w-0">
+                <h4 className="text-xs font-bold text-slate-900 truncate">
+                  {previewFileModal.name}
+                </h4>
+                <p className="text-[10px] text-slate-500">
+                  {formatFileSize(previewFileModal.size)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewFileModal(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                aria-label="Close preview"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 bg-slate-950 flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img
+                src={previewFileModal.base64}
+                alt={previewFileModal.name}
+                className="max-w-full max-h-[68vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>
